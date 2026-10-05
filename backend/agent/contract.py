@@ -1,0 +1,190 @@
+"""The contract between the AI teacher agent and the rest of StudyMate.
+
+Everything that goes into or comes out of the teacher agent is defined here.
+The PDF extraction, the FastAPI routes and the React frontend should only
+rely on these models, so each part can be built independently.
+
+Conventions:
+- Topic indexes are 0-based (the first topic is 0).
+- Slide numbers are 1-based, matching what the student sees in the PDF.
+"""
+
+from enum import Enum
+from typing import Annotated, Literal, Protocol, Union
+
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+
+class _Model(BaseModel):
+    # Trim stray whitespace from typed input and reject unknown fields,
+    # so typos in the frontend's JSON fail loudly instead of being ignored.
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+
+# ---------------------------------------------------------------------------
+# Inputs
+# ---------------------------------------------------------------------------
+
+
+class Environment(str, Enum):
+    """The learning environment the student picks. It sets the personality."""
+
+    LECTURE_HALL = "lecture_hall"  # professor
+    STUDY_ROOM = "study_room"  # tutor
+    CAFE = "cafe"  # study friend
+
+
+class LectureChunk(_Model):
+    """The extracted text of one slide or page of the lecture PDF."""
+
+    slide: int = Field(ge=1)
+    text: str
+
+
+class StartSessionRequest(_Model):
+    """Everything the agent needs to plan and start a new lecture."""
+
+    environment: Environment
+    lecture: list[LectureChunk] = Field(min_length=1)
+
+
+# Student events: each one is something the student did during the lecture.
+# The "type" field tells them apart, e.g. {"type": "answer", "text": "..."}.
+
+
+class AnswerEvent(_Model):
+    """The student's typed answer to the question the teacher asked."""
+
+    type: Literal["answer"] = "answer"
+    text: str = Field(min_length=1)
+
+
+class RaiseHandEvent(_Model):
+    """The student raised their hand while the teacher was speaking.
+
+    segment_index is the speech segment the frontend was playing when the
+    hand went up, so the lecture can resume exactly from there.
+    """
+
+    type: Literal["raise_hand"] = "raise_hand"
+    segment_index: int = Field(ge=0)
+
+
+class QuestionEvent(_Model):
+    """The question the student typed after raising their hand."""
+
+    type: Literal["question"] = "question"
+    text: str = Field(min_length=1)
+
+
+class RepeatEvent(_Model):
+    """Explain the current topic again, in a different way."""
+
+    type: Literal["repeat"] = "repeat"
+
+
+class GoToTopicEvent(_Model):
+    """Jump to a topic in the outline (e.g. go back to an earlier one)."""
+
+    type: Literal["go_to_topic"] = "go_to_topic"
+    topic_index: int = Field(ge=0)
+
+
+class ContinueEvent(_Model):
+    """Move on: the current speech finished playing, carry on with the lecture."""
+
+    type: Literal["continue"] = "continue"
+
+
+class EndEvent(_Model):
+    """The student ended the session."""
+
+    type: Literal["end"] = "end"
+
+
+StudentEvent = Annotated[
+    Union[
+        AnswerEvent,
+        RaiseHandEvent,
+        QuestionEvent,
+        RepeatEvent,
+        GoToTopicEvent,
+        ContinueEvent,
+        EndEvent,
+    ],
+    Field(discriminator="type"),
+]
+
+
+# ---------------------------------------------------------------------------
+# Outputs
+# ---------------------------------------------------------------------------
+
+
+class AvatarState(str, Enum):
+    """What the 2D avatar should be doing."""
+
+    IDLE = "idle"
+    SPEAKING = "speaking"
+    LISTENING = "listening"
+    THINKING = "thinking"
+    ASKING_QUESTION = "asking_question"
+
+
+class Awaiting(str, Enum):
+    """What the frontend should let the student do next."""
+
+    NOTHING = "nothing"  # session is over, no input expected
+    ANSWER = "answer"  # show the answer box
+    QUESTION = "question"  # hand is raised, show the question box
+    CONTINUE = "continue"  # after the speech plays, send a "continue" event
+
+
+class Topic(_Model):
+    """One entry in the lecture outline."""
+
+    index: int = Field(ge=0)
+    title: str
+    summary: str = ""
+
+
+class TeacherResponse(_Model):
+    """What the agent returns after every turn."""
+
+    session_id: str
+    # The teacher's speech, split into short segments. The frontend sends
+    # each one to TTS and plays them in order. Splitting lets the agent know
+    # where it was if the student raises their hand.
+    speech: list[str]
+    avatar_state: AvatarState
+    awaiting: Awaiting
+    outline: list[Topic]
+    current_topic: int | None = None  # None before planning or after the end
+    completed_topics: list[int] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _topics_exist(self) -> "TeacherResponse":
+        valid = range(len(self.outline))
+        if self.current_topic is not None and self.current_topic not in valid:
+            raise ValueError(f"current_topic {self.current_topic} is not in the outline")
+        missing = [i for i in self.completed_topics if i not in valid]
+        if missing:
+            raise ValueError(f"completed_topics {missing} are not in the outline")
+        return self
+
+
+# ---------------------------------------------------------------------------
+# The agent's interface
+# ---------------------------------------------------------------------------
+
+
+class TeacherAgent(Protocol):
+    """The two calls the FastAPI backend makes into the teacher agent."""
+
+    def start_session(self, request: StartSessionRequest) -> TeacherResponse:
+        """Plan the lecture, start teaching and return the first turn."""
+        ...
+
+    def send_event(self, session_id: str, event: StudentEvent) -> TeacherResponse:
+        """Handle one student action and return the teacher's next turn."""
+        ...
