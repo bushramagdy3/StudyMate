@@ -1,3 +1,5 @@
+# CANVA LINK
+https://canva.link/b95zwb5vrq201ue
 # AI Lecture Companion — ForgeHacks 2026
 
 A project for the **ForgeHacks AI + Education** track.
