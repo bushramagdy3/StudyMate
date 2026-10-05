@@ -1,10 +1,11 @@
 import { AppHeader, PixelButton } from './AppHeader.jsx'
-import { environments, scenes } from '../data/studyMate.js'
+import { environments } from '../data/studyMate.js'
 import { prepareSession } from '../services/mockService.js'
+import { SceneBackdrop } from './SceneBackdrop.jsx'
 
 export function EnvironmentCard({ id, config, selected, onClick }) {
   return <button className={`environment-card ${selected ? 'selected' : ''} env-${id}`} onClick={onClick} aria-label={config.label} aria-pressed={selected}>
-    <span className="card-art" aria-hidden="true" />
+    <img className="card-art" src={config.cardArt} alt="" />
     <span className="card-label">{config.label}</span>
   </button>
 }
@@ -22,7 +23,8 @@ export function EnvironmentSelection({ state, navigate }) {
     state.setPreparing(false); state.setProgress(100); state.setEnded(false); state.setMessages([]); state.setCompleted([]); state.setCurrentTopic(1); state.setMode('explaining')
     navigate(`/session/${state.environment}`)
   }
-  return <main className={`scene environment-scene ${state.preparing ? 'is-preparing' : ''}`} style={{ backgroundImage: `url("${state.preparing ? scenes.loading : scenes.environment}")` }}>
+  return <main className={`scene environment-scene ${state.preparing ? 'is-preparing' : ''}`}>
+    <SceneBackdrop />
     <AppHeader onAbout={() => state.setAboutOpen(true)} />
     <section className="environment-content"><h1>Choose Your Environment</h1><div className="environment-grid">{Object.entries(environments).map(([id, config]) => <EnvironmentCard key={id} id={id} config={config} selected={state.environment === id} onClick={() => state.setEnvironment(id)} />)}</div>
       <div className="page-actions"><PixelButton onClick={() => navigate('/upload')}>Back</PixelButton><PixelButton kind="primary" disabled={!state.environment} onClick={begin}>Continue <span aria-hidden="true">▶</span></PixelButton></div>

@@ -53,5 +53,5 @@ export default function App() {
   else if (path === '/environment') page = <EnvironmentSelection state={state} navigate={navigate} />
   else if (sessionMatch && validSession) page = <LectureSession key={sessionMatch[1]} environmentId={sessionMatch[1]} state={state} navigate={navigate} />
   else page = <InvalidRoute navigate={navigate} />
-  return <>{page}{state.aboutOpen && <AboutDialog onClose={() => state.setAboutOpen(false)} />}</>
+  return <>{page}{state.aboutOpen && <AboutDialog pixelStyle={path === '/'} onClose={() => state.setAboutOpen(false)} />}</>
 }
