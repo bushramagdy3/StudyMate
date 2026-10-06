@@ -6,25 +6,22 @@ import pytest
 from agent import llm as llm_module
 from agent.contract import Environment, LectureChunk, StartSessionRequest
 from agent.llm import LLM
-from agent.contract import Awaiting
 from agent.navigation import (
     after_continue,
+    after_entering_topic,
     after_next_topic,
     can_continue,
-    can_end,
-    can_go_back,
     can_go_to_topic,
     can_repeat,
     choose_topic_to_repeat,
     closing_prompt,
     continue_lecture,
     fallback_closing,
-    go_back,
     go_to_topic,
     make_closing_node,
     make_repeat_node,
 )
-from agent.state import Mode, initial_state, to_response
+from agent.state import Mode, initial_state
 
 OUTLINE = [
     {"title": "Pipelining", "summary": "Requests without waiting.", "key_points": [], "source_slides": [1]},
@@ -65,97 +62,76 @@ def no_retry_wait(monkeypatch):
     monkeypatch.setattr(llm_module, "RETRY_DELAY", 0)
 
 
-# --- back and resume -------------------------------------------------------
+# --- clicking a topic's name -------------------------------------------------
 
 
-@pytest.mark.parametrize(
-    "mode, allowed",
-    [
-        (Mode.EXPLAINING, True),
-        (Mode.FEEDBACK, True),
-        (Mode.AWAITING_ANSWER, True),
-        (Mode.AWAITING_STUDENT_QUESTION, True),
-        (Mode.ANSWERING_STUDENT, True),
-        (Mode.PAUSED, False),
-        (Mode.ENDED, False),
-    ],
-)
-def test_when_back_is_allowed(mode, allowed):
-    assert can_go_back(make_state(mode=mode)) is allowed
-
-
-def test_back_during_explanation_saves_the_segment():
-    state = make_state(mode=Mode.EXPLAINING, segment_index=1, speech=["s1", "s2", "s3"])
-    update = go_back(state, segment_index=1)  # was playing s2
-
-    assert update["mode"] is Mode.PAUSED
-    assert update["paused_mode"] is Mode.EXPLAINING
-    assert update["segment_index"] == 2
-    assert update["speech"] == []
-    assert to_response(state | update).awaiting is Awaiting.OUTLINE
-
-
-def test_resume_explanation_from_the_saved_segment():
-    state = make_state(mode=Mode.EXPLAINING, segment_index=1, speech=["s1", "s2", "s3"])
-    paused = state | go_back(state, segment_index=1)
-    update = go_to_topic(paused, 0)  # the topic in progress
-
-    assert update["mode"] is Mode.EXPLAINING
-    assert update["speech"] == ["s2", "s3"]
-    assert update["paused_mode"] is None
-    assert "history" not in update  # not added to history twice
-
-
-def test_resume_a_waiting_question_asks_it_again():
-    state = make_state(mode=Mode.AWAITING_ANSWER, pending_question=QUESTION, attempts=1, speech=["Hint..."])
-    paused = state | go_back(state)
-    update = go_to_topic(paused, 0)
-
-    assert update["mode"] is Mode.AWAITING_ANSWER
-    assert update["speech"] == ["Hint..."]
-    assert "attempts" not in update  # their tries still count
-
-
-# --- go to topic (from the outline) -----------------------------------------
-
-
-def test_go_to_topic_only_from_the_outline():
-    assert can_go_to_topic(make_state(mode=Mode.PAUSED), 2)
-    assert not can_go_to_topic(make_state(mode=Mode.PAUSED), 3)  # no such topic
-    assert not can_go_to_topic(make_state(mode=Mode.PAUSED), -1)
+def test_topic_can_be_clicked_any_time_during_the_lecture():
     for mode in Mode:
-        if mode is not Mode.PAUSED:
-            assert not can_go_to_topic(make_state(mode=mode), 0)
+        assert can_go_to_topic(make_state(mode=mode), 2) is (mode is not Mode.ENDED)
+    assert not can_go_to_topic(make_state(), 3)  # no such topic
+    assert not can_go_to_topic(make_state(), -1)
 
 
-def test_go_to_another_topic_starts_it_and_keeps_progress():
-    state = make_state(mode=Mode.PAUSED, completed_topics=[0], pending_question=QUESTION)
+def test_new_topic_is_taught_from_the_start():
+    state = make_state(completed_topics=[0], pending_question=QUESTION)
     update = go_to_topic(state, 2)
     assert update["current_topic"] == 2
-    assert update["segments"] == [] and update["segment_index"] == 0
+    assert update["segments"] == [] and update["segment_index"] == 0  # explain node writes it
     assert update["pending_question"] is None
-    assert "completed_topics" not in update  # ticks stay
+    assert after_entering_topic(state | update) == "explain"
 
 
-# --- repeat (from the outline) ----------------------------------------------
+def test_leaving_a_topic_saves_it_and_coming_back_resumes():
+    state = make_state(segment_index=1)  # in topic 0, part [s1, s2, s3] playing
+    away = state | go_to_topic(state, 2)
+    assert away["topic_progress"][0]["segment_index"] == 1
+
+    away = away | {"segments": ["t2-s0"], "question_points": [1], "segment_index": 0}
+    back = away | go_to_topic(away, 0)
+    assert back["current_topic"] == 0
+    assert back["speech"] == ["s1", "s2", "s3"]  # resumed where they left
+    assert back["topic_progress"][2]["segments"] == ["t2-s0"]  # topic 2 saved too
+    assert after_entering_topic(back) == "wait"  # already set up, no LLM call
 
 
-def test_repeat_only_from_the_outline_for_taught_topics():
-    paused = make_state(mode=Mode.PAUSED, current_topic=1, completed_topics=[0])
-    assert can_repeat(paused, 0)  # completed
-    assert can_repeat(paused, 1)  # in progress
-    assert not can_repeat(paused, 2)  # not taught yet
-    assert not can_repeat(make_state(mode=Mode.EXPLAINING), 0)
+def test_leaving_during_a_question_resumes_the_part_it_was_about():
+    state = make_state(mode=Mode.AWAITING_ANSWER, segment_index=4, pending_question=QUESTION)
+    away = state | go_to_topic(state, 2)
+    assert away["topic_progress"][0]["segment_index"] == 1  # start of part [s1, s2, s3]
 
 
-def test_repeat_the_topic_in_progress_uses_the_old_explanation():
+def test_finished_topic_is_explained_again_the_same_way():
+    saved = {"segments": ["s0", "s1", "s2", "s3"], "question_points": [1, 4], "segment_index": 4}
+    state = make_state(current_topic=1, segments=[], completed_topics=[0], topic_progress={0: saved})
+    update = go_to_topic(state, 0)
+    assert update["speech"] == ["s0"]  # same explanation, from the start
+    assert update["segment_index"] == 0
+
+
+def test_clicking_the_current_topic_restarts_it():
+    update = go_to_topic(make_state(segment_index=1), 0)
+    assert update["speech"] == ["s0"]
+    assert update["segment_index"] == 0
+
+
+# --- repeat button ----------------------------------------------------------
+
+
+def test_repeat_only_for_taught_topics():
+    state = make_state(current_topic=1, completed_topics=[0], topic_progress={})
+    assert can_repeat(state, 0)  # finished
+    assert can_repeat(state, 1)  # current
+    assert not can_repeat(state, 2)  # not taught yet
+    assert not can_repeat(make_state(mode=Mode.ENDED), 0)
+
+
+def test_repeat_the_current_topic_reprompts_with_the_old_explanation():
     llm, sent = fake_llm({"segments": ["n0", "n1", "n2", "n3"], "question_after": [2, 4]})
-    state = make_state(mode=Mode.PAUSED, pending_question=QUESTION, attempts=1)
+    state = make_state(mode=Mode.AWAITING_ANSWER, pending_question=QUESTION, attempts=1)
     state = state | choose_topic_to_repeat(state, 0)
     update = make_repeat_node(llm)(state)
 
     assert update["segments"] == ["n0", "n1", "n2", "n3"]
-    assert update["segment_index"] == 0
     assert update["speech"] == ["n0", "n1"]
     assert update["mode"] is Mode.EXPLAINING
     assert update["pending_question"] is None and update["attempts"] == 0
@@ -163,17 +139,17 @@ def test_repeat_the_topic_in_progress_uses_the_old_explanation():
     assert '"s0"' in prompt and "differently" in prompt
 
 
-def test_repeat_a_completed_topic_explains_it_again_without_old_text():
+def test_repeat_a_finished_topic_uses_its_saved_explanation():
     llm, sent = fake_llm({"segments": ["n0", "n1", "n2", "n3"], "question_after": [2, 4]})
-    state = make_state(mode=Mode.PAUSED, current_topic=1, completed_topics=[0])
+    saved = {"segments": ["old0", "old1"], "question_points": [2], "segment_index": 2}
+    state = make_state(current_topic=1, completed_topics=[0], topic_progress={0: saved})
     state = state | choose_topic_to_repeat(state, 0)
-    update = make_repeat_node(llm)(state)
+    make_repeat_node(llm)(state)
 
     assert state["current_topic"] == 0
-    assert update["speech"] == ["n0", "n1"]
+    assert state["topic_progress"][1]["segments"] == ["s0", "s1", "s2", "s3"]  # topic 1 saved
     prompt = sent[0]["messages"][1]["content"]
-    assert "explained again" in prompt and "differently" in prompt
-    assert '"s0"' not in prompt  # old explanation of another topic isn't used
+    assert '"old0"' in prompt and '"s0"' not in prompt
 
 
 # --- continue ---------------------------------------------------------------
@@ -182,7 +158,7 @@ def test_repeat_a_completed_topic_explains_it_again_without_old_text():
 def test_continue_checks():
     for mode in (Mode.EXPLAINING, Mode.FEEDBACK, Mode.ANSWERING_STUDENT):
         assert can_continue(make_state(mode=mode))
-    for mode in (Mode.AWAITING_ANSWER, Mode.AWAITING_STUDENT_QUESTION, Mode.PAUSED, Mode.ENDED):
+    for mode in (Mode.AWAITING_ANSWER, Mode.AWAITING_STUDENT_QUESTION, Mode.ENDED):
         assert not can_continue(make_state(mode=mode))
 
 
@@ -209,16 +185,12 @@ def test_continue_after_answering_a_raised_hand_returns_to_the_explanation():
 
 
 def test_after_next_topic():
-    assert after_next_topic(make_state(current_topic=1)) == "explain"
+    assert after_next_topic(make_state(current_topic=1, segments=[])) == "explain"
+    assert after_next_topic(make_state(current_topic=1)) == "wait"  # resumed a saved topic
     assert after_next_topic(make_state(current_topic=None)) == "closing"
 
 
 # --- end --------------------------------------------------------------------
-
-
-def test_can_end_until_it_has_ended():
-    assert can_end(make_state(mode=Mode.AWAITING_ANSWER))
-    assert not can_end(make_state(mode=Mode.ENDED))
 
 
 def test_closing_prompt_summarises_progress():

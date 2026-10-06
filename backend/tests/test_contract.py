@@ -5,7 +5,6 @@ from agent.contract import (
     AnswerEvent,
     Awaiting,
     AvatarState,
-    BackEvent,
     Environment,
     GoToTopicEvent,
     RaiseHandEvent,
@@ -51,8 +50,6 @@ def test_start_request_rejects_bad_input(payload):
         ({"type": "answer", "text": "  multiplexing  "}, AnswerEvent(text="multiplexing")),
         ({"type": "raise_hand", "segment_index": 2}, RaiseHandEvent(segment_index=2)),
         ({"type": "go_to_topic", "topic_index": 0}, GoToTopicEvent(topic_index=0)),
-        ({"type": "back", "segment_index": 1}, BackEvent(segment_index=1)),
-        ({"type": "back"}, BackEvent(segment_index=0)),
         ({"type": "repeat", "topic_index": 2}, RepeatEvent(topic_index=2)),
     ],
 )
@@ -66,6 +63,8 @@ def test_events_parse_by_type(payload, expected):
         {"type": "dance"},
         {"type": "answer", "text": "   "},
         {"type": "raise_hand"},
+        {"type": "back"},  # no back button
+        {"type": "end"},  # ending is Teacher.end_session(), not an event
         {"type": "repeat"},  # which topic to repeat is required
         {"type": "continue", "extra": 1},
     ],

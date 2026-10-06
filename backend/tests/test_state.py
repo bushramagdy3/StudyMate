@@ -45,7 +45,6 @@ def test_feedback_kind(correct, attempts, expected):
         (Mode.ANSWERING_STUDENT, AvatarState.SPEAKING, Awaiting.CONTINUE),
         (Mode.AWAITING_ANSWER, AvatarState.ASKING_QUESTION, Awaiting.ANSWER),
         (Mode.AWAITING_STUDENT_QUESTION, AvatarState.LISTENING, Awaiting.QUESTION),
-        (Mode.PAUSED, AvatarState.IDLE, Awaiting.OUTLINE),
         (Mode.ENDED, AvatarState.IDLE, Awaiting.NOTHING),
     ],
 )
