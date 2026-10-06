@@ -349,10 +349,6 @@ async def generate_speech_audio(text: str):
             detail="Featherless returned empty audio.",
         )
 
-    print("TTS format:", audio_format)
-    print("TTS audio bytes:", len(audio_bytes))
-    print("TTS first bytes:", audio_bytes[:12])
-
     return audio_bytes, audio_format
 
 
