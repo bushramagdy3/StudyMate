@@ -1,9 +1,8 @@
 import pytest
-from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
 
 from agent.contract import Awaiting, AvatarState, Environment, LectureChunk, StartSessionRequest
-from agent.state import Mode, TeacherState, feedback_kind, initial_state, to_response
+from agent.state import Mode, TeacherState, feedback_kind, initial_state, make_checkpointer, to_response
 
 REQUEST = StartSessionRequest(
     environment=Environment.STUDY_ROOM,
@@ -60,7 +59,7 @@ def test_to_response_maps_mode(mode, avatar, awaiting):
     assert response.speech == ["Hi!"]
 
 
-def test_state_survives_the_checkpointer():
+def test_state_survives_the_checkpointer(caplog):
     """The state (including pydantic objects and the history reducer) is saved and reloaded."""
 
     def plan(state: TeacherState) -> dict:
@@ -74,7 +73,7 @@ def test_state_survives_the_checkpointer():
     graph.add_node("plan", plan)
     graph.add_edge(START, "plan")
     graph.add_edge("plan", END)
-    app = graph.compile(checkpointer=MemorySaver())
+    app = graph.compile(checkpointer=make_checkpointer())
 
     config = {"configurable": {"thread_id": "abc"}}
     app.invoke(initial_state("abc", REQUEST), config)
@@ -84,3 +83,4 @@ def test_state_survives_the_checkpointer():
     assert saved["environment"] is Environment.STUDY_ROOM
     assert saved["history"] == [{"role": "teacher", "text": "Welcome!"}]
     assert to_response(saved).current_topic == 0
+    assert "unregistered type" not in caplog.text
