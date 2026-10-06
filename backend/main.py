@@ -34,7 +34,7 @@ def pdf_to_page_images(pdf_bytes: bytes) -> list[bytes]:
 
 def describe_page_image(image_bytes: bytes, slide_number: int) -> str:
     api_key = os.getenv("FEATHERLESS_API_KEY") or os.getenv("API_KEY")
-    model = os.getenv("FEATHERLESS_MODEL", "google/gemma-3-27b-it")
+    model = os.getenv("FEATHERLESS_MODEL", "moonshotai/Kimi-K3")
 
     if not api_key:
         raise HTTPException(status_code=500, detail="Missing Featherless API key.")
@@ -42,15 +42,22 @@ def describe_page_image(image_bytes: bytes, slide_number: int) -> str:
     image_base64 = base64.b64encode(image_bytes).decode("utf-8")
 
     prompt = f"""
-Look at this lecture slide/page as an image.
+You are converting a lecture slide into a LectureChunk for an AI teacher.
 
-Describe precisely what slide {slide_number} is about.
-Describe the visible topic, diagrams, images, tables, labels, examples,
-relationships, and the scope of the content on the page.
+Read slide {slide_number} visually and write the text field for this page.
+Focus on the academic content, concepts, and scope of the slide.
+Explain what the slide is teaching and what the teacher should understand
+before generating an explanation from it.
 
-Return only the description text.
+If there is a diagram, table, image, equation, or example, explain what it means
+conceptually. Do not describe its colors, positions, icons, fonts, or layout
+unless that visual detail is necessary to understand the concept.
+
+Return only the LectureChunk text.
 Do not return JSON.
+Do not add headings.
 Do not add extra fields.
+Do not invent content that is not visible on the slide.
 """
 
     response = httpx.post(
@@ -81,7 +88,15 @@ Do not add extra fields.
     )
 
     if response.status_code != 200:
-        raise HTTPException(status_code=502, detail=response.text)
+        try:
+            error = response.json()["error"]["message"]
+        except Exception:
+            error = response.text
+
+        raise HTTPException(
+            status_code=502,
+            detail=f"Featherless error for model {model}: {error}",
+        )
 
     data = response.json()
     return data["choices"][0]["message"]["content"].strip()
