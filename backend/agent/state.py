@@ -6,6 +6,8 @@ so it is also everything that survives between two API calls.
 
 import operator
 from enum import Enum
+from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from typing import Annotated, Literal, TypedDict
 
 from agent.contract import (
@@ -156,3 +158,15 @@ def to_response(state: TeacherState) -> TeacherResponse:
         current_topic=state["current_topic"],
         completed_topics=state["completed_topics"],
     )
+
+# Our own types that are stored in the state. LangGraph only reloads saved
+# types it has been told are safe, so they're listed here.
+SAVED_TYPES = [
+    ("agent.contract", "Environment"),
+    ("agent.contract", "LectureChunk"),
+    ("agent.state", "Mode"),
+]
+
+def make_checkpointer() -> MemorySaver:
+    """The save system for sessions (Step 2's MemorySaver), allowing our types."""
+    return MemorySaver(serde=JsonPlusSerializer(allowed_msgpack_modules=SAVED_TYPES))
