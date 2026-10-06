@@ -125,8 +125,7 @@ def get_llm() -> LLM:
         raise LLMError("Missing FEATHERLESS_API_KEY in backend/.env")
     # The teacher can use a different model from the PDF upload; by default it's the same one.
     model = (
-        os.getenv("FEATHERLESS_TEACHER_MODEL")
-        or os.getenv("FEATHERLESS_MODEL")
+        os.getenv("FEATHERLESS_MODEL")
         or DEFAULT_MODEL
     )
     return LLM(api_key, model)
