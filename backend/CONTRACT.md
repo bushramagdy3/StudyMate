@@ -27,7 +27,7 @@ The backend sends the extracted lecture plus the chosen environment:
 
 Every student action is sent as one event, told apart by `type`.
 
-**During the lecture:**
+**The lecture:**
 
 | Event | JSON | When |
 |---|---|---|
@@ -35,17 +35,20 @@ Every student action is sent as one event, told apart by `type`.
 | answer | `{"type": "answer", "text": "..."}` | Student submits an answer to the teacher's question |
 | raise_hand | `{"type": "raise_hand", "segment_index": 2}` | Raise-hand button (only when `can_raise_hand` is true); `segment_index` is the position, from 0, in the `speech` list that was playing |
 | question | `{"type": "question", "text": "..."}` | Student submits their question after raising their hand |
-| back | `{"type": "back", "segment_index": 1}` | Back button: leaves for the outline page and saves the student's place; `segment_index` as for raise_hand |
 
-**On the outline page** (when `awaiting` is `"outline"`):
+**The outline** (on the same page, usable any time during the lecture):
 
 | Event | JSON | When |
 |---|---|---|
-| go_to_topic | `{"type": "go_to_topic", "topic_index": 0}` | Student picks a topic. The topic in progress resumes exactly where they left; any other topic starts from its beginning |
-| repeat | `{"type": "repeat", "topic_index": 0}` | "Explain again" for a topic in `completed_topics` or the `current_topic`; Regina explains it differently |
-| end | `{"type": "end"}` | Optional: end the session now with the goodbye summary. The lecture also ends on its own after the last topic |
+| go_to_topic | `{"type": "go_to_topic", "topic_index": 0}` | Student clicks a topic's name. A topic left halfway resumes where they left it; a finished topic (or the current one) is explained again the same way; a topic not reached yet is taught |
+| repeat | `{"type": "repeat", "topic_index": 0}` | Repeat button on a topic they've been taught (in `completed_topics`, or the `current_topic`, or one left halfway); Regina explains it again, differently |
 
-Events sent at the wrong time are ignored.
+**End session** isn't an event: the backend calls `teacher.end_session(session_id)`,
+which deletes the session (nothing is saved), and the frontend goes to the homepage.
+When the student finishes the last topic, Regina says goodbye with a short summary
+and `awaiting` becomes `"nothing"`.
+
+Events sent at the wrong time are rejected (HTTP 409) and change nothing.
 
 ## 3. What the agent returns (every turn)
 
@@ -74,17 +77,32 @@ Events sent at the wrong time are ignored.
   - `continue`: play the speech, then automatically send `{"type": "continue"}`
   - `answer`: show the answer box
   - `question`: hand is raised, show the question box
-  - `outline`: lecture paused, show the outline page
-  - `nothing`: the session is over
+  - `nothing`: the lecture is finished (after the goodbye)
 - **outline**, **current_topic**, **completed_topics**: for the progress sidebar.
 - **can_raise_hand**: show the raise-hand button only when this is `true`
   (while the teacher is explaining). `raise_hand` is ignored at other times.
 
 ## 4. The agent's Python interface
 
-The FastAPI routes call exactly two methods:
+Create **one** `Teacher` when the server starts and share it between requests
+(it holds every session):
 
 ```python
-agent.start_session(request: StartSessionRequest) -> TeacherResponse
-agent.send_event(session_id: str, event: StudentEvent) -> TeacherResponse
+from agent.teacher import Teacher, SessionNotFound, EventNotAllowed
+
+teacher = Teacher()  # reads FEATHERLESS_API_KEY / FEATHERLESS_MODEL from backend/.env
+
+teacher.start_session(request: StartSessionRequest) -> TeacherResponse
+teacher.send_event(session_id: str, event: StudentEvent) -> TeacherResponse
+teacher.get_session(session_id: str) -> TeacherResponse  # current turn again, changes nothing
+teacher.end_session(session_id: str) -> None             # "end session" button: deletes it
 ```
+
+Errors, and the HTTP status to return for them:
+
+| Exception | Meaning | HTTP |
+|---|---|---|
+| `SessionNotFound` | wrong `session_id`, or the server restarted | 404 |
+| `EventNotAllowed` | event sent at the wrong time; nothing changed | 409 |
+
+Sessions are kept in memory: restarting the server ends them.
