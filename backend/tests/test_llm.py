@@ -106,12 +106,11 @@ def test_chat_json_raises_after_two_bad_replies():
 def test_get_llm_reads_settings(monkeypatch):
     monkeypatch.setattr(llm_module, "load_dotenv", lambda *args: None)
     monkeypatch.setenv("FEATHERLESS_API_KEY", "key")
-    monkeypatch.setenv("FEATHERLESS_MODEL", "upload-model")
-    monkeypatch.delenv("FEATHERLESS_TEACHER_MODEL", raising=False)
-    assert get_llm().model == "upload-model"
+    monkeypatch.setenv("FEATHERLESS_MODEL", "my-model")
+    assert get_llm().model == "my-model"
 
-    monkeypatch.setenv("FEATHERLESS_TEACHER_MODEL", "teacher-model")
-    assert get_llm().model == "teacher-model"
+    monkeypatch.delenv("FEATHERLESS_MODEL")
+    assert get_llm().model == llm_module.DEFAULT_MODEL
 
 
 def test_get_llm_needs_a_key(monkeypatch):
