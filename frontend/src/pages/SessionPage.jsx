@@ -1,16 +1,71 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { MessageBar } from '../components/MessageBar.jsx'
 import { SessionOutline } from '../components/SessionOutline.jsx'
 import { sessionState } from '../data/sessionState.js'
 
+async function playTutorSpeech(text) {
+  const speechText = Array.isArray(text)
+    ? text.join(' ')
+    : text
+
+  if (!speechText) return
+
+  const response = await fetch("http://127.0.0.1:8000/api/tutor-speech", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      text: speechText
+    })
+  })
+
+  if (!response.ok) {
+    throw new Error("Could not generate tutor speech")
+  }
+
+  const audioBlob = await response.blob()
+  const audioUrl = URL.createObjectURL(audioBlob)
+
+  const audio = new Audio(audioUrl)
+
+  audio.onended = () => {
+    URL.revokeObjectURL(audioUrl)
+  }
+
+  await audio.play()
+}
+
 export function SessionPage({ environment }) {
   const [teacherResponse, setTeacherResponse] = useState(sessionState)
+
   const avatarPosture = teacherResponse.avatar_state || 'idle'
+
   const avatarImage =
-    environment.avatars[avatarPosture] || environment.avatars.idle || environment.avatar
+    environment.avatars[avatarPosture] ||
+    environment.avatars.idle ||
+    environment.avatar
+
   const currentTopic = teacherResponse.outline.find(
     (topic) => topic.index === teacherResponse.current_topic,
   )
+
+  const [currentSpeech, setCurrentSpeech] = useState(
+    "Hello! I'm Regina, your Teacher."
+  )
+
+  useEffect(() => {
+    if (currentSpeech !== "Hello! I'm Regina, your Teacher.") {
+      playTutorSpeech(currentSpeech).catch(console.error)
+    }
+  }, [currentSpeech])
+
+  useEffect(() => {
+    async function temp(){
+        setCurrentSpeech(teacherResponse.speech)
+    }
+    temp();
+  }, [teacherResponse.speech])
 
   function chooseTopic(topicIndex) {
     setTeacherResponse((response) => ({
@@ -36,7 +91,9 @@ export function SessionPage({ environment }) {
   function sendMessage(text) {
     setTeacherResponse((response) => {
       const topic =
-        response.outline.find((item) => item.index === response.current_topic) ||
+        response.outline.find(
+          (item) => item.index === response.current_topic
+        ) ||
         response.outline[0]
 
       if (response.awaiting === 'answer') {
@@ -71,7 +128,10 @@ export function SessionPage({ environment }) {
         {teacherResponse.speech.join(' ')}
       </p>
 
-      <section className="session-stage" aria-label={`${environment.name} session`}>
+      <section
+        className="session-stage"
+        aria-label={`${environment.name} session`}
+      >
         <img
           className="session-background"
           src={environment.background}
@@ -80,7 +140,9 @@ export function SessionPage({ environment }) {
 
         <div
           className="pdf-slide-slot"
-          aria-label={`PDF slide for ${currentTopic?.title || 'the current topic'} will appear here`}
+          aria-label={`PDF slide for ${
+            currentTopic?.title || 'the current topic'
+          } will appear here`}
           data-pdf-slide-slot
         />
 
