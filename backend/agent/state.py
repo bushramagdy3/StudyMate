@@ -75,6 +75,7 @@ class TeacherState(TypedDict):
     current_topic: int | None  # None until the outline exists, and after the end
     segments: list[str]  # the current topic's explanation, split into short parts
     segment_index: int  # next segment to say; on raise_hand, the one to resume from
+    question_points: list[int]  # ask a question after these segment numbers, e.g. [2, 4]
     completed_topics: list[int]
 
     # --- what we are doing right now ---
@@ -101,6 +102,7 @@ def initial_state(session_id: str, request: StartSessionRequest) -> TeacherState
         "current_topic": None,
         "segments": [],
         "segment_index": 0,
+        "question_points": [],
         "completed_topics": [],
         "mode": Mode.EXPLAINING,
         "pending_question": None,
