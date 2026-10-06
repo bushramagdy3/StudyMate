@@ -54,6 +54,7 @@ Every student action is sent as one event, told apart by `type`:
   ],
   "current_topic": 0,
   "completed_topics": []
+  "can_raise_hand": true
 }
 ```
 
