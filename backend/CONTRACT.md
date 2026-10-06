@@ -42,11 +42,13 @@ Every student action is sent as one event, told apart by `type`.
 |---|---|---|
 | go_to_topic | `{"type": "go_to_topic", "topic_index": 0}` | Student clicks a topic's name. A topic left halfway resumes where they left it; a finished topic (or the current one) is explained again the same way; a topic not reached yet is taught |
 | repeat | `{"type": "repeat", "topic_index": 0}` | Repeat button on a topic they've been taught (in `completed_topics`, or the `current_topic`, or one left halfway); Regina explains it again, differently |
+| summary | `{"type": "summary"}` | "Summary" item at the top of the outline, **private tutor only** (show it when `summary_available` is true). Regina summarises the whole lecture; after it plays, `continue` returns to where the student was |
 
 **End session** isn't an event: the backend calls `teacher.end_session(session_id)`,
 which deletes the session (nothing is saved), and the frontend goes to the homepage.
-When the student finishes the last topic, Regina says goodbye with a short summary
-and `awaiting` becomes `"nothing"`.
+When the student finishes the last topic, Regina says a short goodbye and `awaiting`
+becomes `"nothing"`. If the student made any mistakes (even if they got the answer
+right on the retry), she names those topics to review.
 
 Events sent at the wrong time are rejected (HTTP 409) and change nothing.
 
@@ -67,7 +69,8 @@ Events sent at the wrong time are rejected (HTTP 409) and change nothing.
   ],
   "current_topic": 0,
   "completed_topics": [],
-  "can_raise_hand": true
+  "can_raise_hand": true,
+  "summary_available": false
 }
 ```
 
@@ -78,7 +81,12 @@ Events sent at the wrong time are rejected (HTTP 409) and change nothing.
   - `answer`: show the answer box
   - `question`: hand is raised, show the question box
   - `nothing`: the lecture is finished (after the goodbye)
-- **outline**, **current_topic**, **completed_topics**: for the progress sidebar.
+- **outline**: the topic list shown next to the lecture.
+- **current_topic**: the topic being taught (highlight it in the outline).
+- **completed_topics**: topics the student finished; show them in **green**.
+  There is no progress bar and no score.
+- **summary_available**: show "Summary" at the top of the outline only when this
+  is `true` (private tutor, until the lecture ends).
 - **can_raise_hand**: show the raise-hand button only when this is `true`
   (while the teacher is explaining). `raise_hand` is ignored at other times.
 
