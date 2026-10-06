@@ -10,6 +10,119 @@
   --pixel-display: "Press Start 2P", "Pixelify Sans", monospace;
 }
 
+@keyframes header-drop {
+  0% {
+    transform: translateY(-100%);
+  }
+
+  100% {
+    transform: translateY(0);
+  }
+}
+
+@keyframes hero-idle {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+
+  50% {
+    transform: translateY(-5px) scale(1.012);
+  }
+}
+
+@keyframes small-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+@keyframes soft-pulse {
+  0%,
+  100% {
+    filter: brightness(1);
+    transform: scale(1);
+  }
+
+  50% {
+    filter: brightness(1.04);
+    transform: scale(1.006);
+  }
+}
+
+@keyframes panel-pop {
+  0% {
+    opacity: 0;
+    transform: translateY(12px) scale(0.986);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes card-enter {
+  0% {
+    opacity: 0;
+    transform: translateY(16px) scale(0.982);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes selected-card-idle {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+
+  50% {
+    transform: translateY(-3px) scale(1.01);
+  }
+}
+
+@keyframes avatar-idle {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+
+  50% {
+    transform: translateY(-5px) scale(1.008);
+  }
+}
+
+@keyframes raised-pulse {
+  0%,
+  100% {
+    filter: brightness(1.08);
+  }
+
+  50% {
+    filter: brightness(1.18);
+  }
+}
+
+@keyframes hand-wave {
+  0%,
+  100% {
+    transform: rotate(0deg) translateY(-4px) scale(1.1);
+  }
+
+  50% {
+    transform: rotate(-7deg) translateY(-5px) scale(1.14);
+  }
+}
+
 .screen {
   aspect-ratio: 1672 / 941;
   background-position: center;
@@ -20,14 +133,16 @@
   font-weight: 600;
   isolation: isolate;
   margin: 0;
-  min-width: 1000px;
+  max-width: 100%;
+  min-width: 0;
   overflow: hidden;
   position: relative;
-  width: 100vw;
+  width: 100%;
 }
 
 .site-header {
   align-items: center;
+  animation: header-drop 300ms steps(6, end) both;
   background:
     linear-gradient(rgba(16, 15, 15, 0.08), rgba(16, 15, 15, 0.08)),
     url("./assets/header_background.png");
@@ -67,6 +182,7 @@ button {
 }
 
 .brand-logo {
+  animation: small-bob 3.8s steps(4, end) infinite;
   image-rendering: pixelated;
   width: clamp(54px, 5vw, 84px);
 }
@@ -118,17 +234,29 @@ button {
   filter: brightness(1.12);
 }
 
-.home-copy {
+.home-content {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(22px, 2.6vw, 44px);
   left: 5.2%;
   position: absolute;
   top: 35.6%;
   width: 36.5%;
 }
 
+.home-copy {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(12px, 1.45vw, 24px);
+  width: 100%;
+}
+
 .home-title-img {
+  animation: hero-idle 3.9s ease-in-out infinite;
   display: block;
   image-rendering: pixelated;
-  margin: 0 0 1.8%;
+  margin: 0;
+  transform-origin: center bottom;
   width: 100%;
 }
 
@@ -154,11 +282,8 @@ button {
   align-items: stretch;
   display: flex;
   gap: 5.8%;
-  height: 8%;
-  left: 5.85%;
-  position: absolute;
-  top: 62.45%;
-  width: 30.3%;
+  margin-left: 3.8%;
+  width: 83%;
 }
 
 .home-start {
@@ -183,7 +308,7 @@ button {
 
 .asset-button img {
   display: block;
-  height: 100%;
+  height: auto;
   image-rendering: pixelated;
   object-fit: contain;
   width: 100%;
@@ -194,12 +319,19 @@ button {
   transform: translateY(-1px);
 }
 
+.asset-button:active:not(:disabled),
+.message-send:active,
+.session-topic:active {
+  transform: translateY(2px) scale(0.98);
+}
+
 .asset-button:disabled {
   cursor: not-allowed;
   filter: grayscale(0.45) brightness(0.55);
 }
 
 .page-title {
+  animation: small-bob 4.4s steps(4, end) infinite;
   font-family: var(--pixel-display);
   font-size: clamp(27px, 2.65vw, 45px);
   line-height: 1;
@@ -207,12 +339,20 @@ button {
   text-align: center;
 }
 
-.upload-heading {
+.upload-content {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(15px, 1.8vw, 34px);
   left: 0;
   position: absolute;
   right: 0;
-  text-align: center;
   top: 21.7%;
+}
+
+.upload-heading {
+  text-align: center;
+  width: 100%;
 }
 
 .upload-heading p {
@@ -224,13 +364,14 @@ button {
 }
 
 .upload-panel {
+  animation: panel-pop 340ms steps(7, end) both;
   background-position: center;
   background-repeat: no-repeat;
   background-size: 100% 100%;
-  height: 46.8%;
-  left: 30.8%;
-  position: absolute;
-  top: 34.6%;
+  aspect-ratio: 660 / 440;
+  height: auto;
+  position: relative;
+  transform-origin: center;
   width: 39.5%;
 }
 
@@ -244,6 +385,11 @@ button {
   position: absolute;
   top: 6.6%;
   width: 91.6%;
+}
+
+.drop-zone:not(:disabled) {
+  animation: soft-pulse 4.2s ease-in-out infinite;
+  transform-origin: center;
 }
 
 .drop-zone.disabled {
@@ -359,14 +505,12 @@ button {
   align-items: stretch;
   display: flex;
   gap: 4.7%;
-  height: 7.1%;
-  left: 32.1%;
-  position: absolute;
+  position: relative;
   width: 36.8%;
 }
 
 .flow-actions .asset-button {
-  height: 100%;
+  height: auto;
 }
 
 .back-flow-button {
@@ -377,12 +521,15 @@ button {
   width: 48.5%;
 }
 
-.upload-actions,
-.environment-actions {
-  top: 83.9%;
+.choose-title {
+  width: 100%;
 }
 
-.choose-title {
+.choose-content {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(18px, 2.6vw, 44px);
   left: 0;
   position: absolute;
   right: 0;
@@ -390,22 +537,31 @@ button {
 }
 
 .environment-grid {
-  align-items: flex-start;
-  display: flex;
+  align-items: start;
+  display: grid;
   gap: 2.4%;
-  left: 7.65%;
-  position: absolute;
-  top: 30.2%;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  overflow: visible;
   width: 84.8%;
 }
 
 .environment-card {
+  animation: card-enter 360ms steps(7, end) backwards;
   display: block;
   position: relative;
+  transform-origin: center bottom;
   transition:
     filter 120ms ease,
     transform 120ms ease;
-  width: 31.75%;
+  width: 100%;
+}
+
+.environment-card:nth-child(2) {
+  animation-delay: 80ms;
+}
+
+.environment-card:nth-child(3) {
+  animation-delay: 160ms;
 }
 
 .environment-card:hover,
@@ -415,27 +571,28 @@ button {
 }
 
 .environment-card[aria-pressed="true"] {
-  filter:
-    brightness(1.18)
-    saturate(1.08)
-    drop-shadow(0 0 clamp(12px, 1.7vw, 28px) rgba(255, 220, 168, 0.72));
+  filter: brightness(1.07) saturate(1.04);
   transform: translateY(-4px) scale(1.015);
 }
 
 .environment-card[aria-pressed="true"]::after {
-  background:
-    radial-gradient(circle at 50% 44%, rgba(255, 244, 225, 0.2), transparent 58%),
-    rgba(255, 240, 216, 0.08);
-  content: "";
-  inset: 0;
-  pointer-events: none;
-  position: absolute;
+  content: none;
 }
 
 .environment-card img {
   display: block;
   image-rendering: pixelated;
+  position: relative;
   width: 100%;
+  z-index: 1;
+}
+
+.environment-card[aria-pressed="true"] img {
+  animation: selected-card-idle 2.6s ease-in-out infinite;
+  filter:
+    drop-shadow(0 0 clamp(8px, 1vw, 16px) rgba(255, 229, 185, 0.85))
+    drop-shadow(0 0 clamp(14px, 1.6vw, 26px) rgba(255, 176, 88, 0.55));
+  transform-origin: center bottom;
 }
 
 .session-page {
@@ -446,6 +603,7 @@ button {
 }
 
 .session-stage {
+  animation: panel-pop 340ms steps(7, end) both;
   background: #1c1210;
   border: clamp(3px, 0.24vw, 4px) solid #f0aa78;
   box-shadow:
@@ -471,8 +629,10 @@ button {
 }
 
 .session-avatar {
+  animation: avatar-idle 3.4s ease-in-out infinite;
   image-rendering: pixelated;
   position: absolute;
+  transform-origin: center bottom;
   z-index: 3;
 }
 
@@ -522,12 +682,15 @@ button {
 }
 
 .session-outline {
+  animation: panel-pop 380ms steps(7, end) 70ms both;
   background: rgba(28, 19, 17, 0.96);
   border: clamp(3px, 0.24vw, 4px) solid #f0aa78;
   box-shadow:
     0 0 0 clamp(2px, 0.18vw, 3px) #110c0b,
     inset 0 0 18px rgba(0, 0, 0, 0.35);
   color: var(--cream);
+  display: flex;
+  flex-direction: column;
   height: 71.2%;
   left: 73%;
   padding: 1.35% 1.55%;
@@ -538,6 +701,7 @@ button {
 }
 
 .session-outline h2 {
+  flex: 0 0 auto;
   font-family: var(--pixel-font);
   font-size: clamp(27px, 2.22vw, 38px);
   font-weight: 800;
@@ -549,7 +713,8 @@ button {
   display: flex;
   flex-direction: column;
   gap: clamp(10px, 1.55vw, 17px);
-  height: 75%;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
   padding: 0 1.5% 1% 0;
 }
@@ -583,6 +748,11 @@ button {
   line-height: 1;
   padding: 0 6% 0 7%;
   text-align: left;
+  transition:
+    background 120ms ease,
+    border-color 120ms ease,
+    filter 120ms ease,
+    transform 120ms ease;
 }
 
 .session-topic.active {
@@ -598,6 +768,7 @@ button {
 
 .message-bar {
   align-items: center;
+  animation: panel-pop 380ms steps(7, end) 120ms both;
   background: rgba(27, 18, 16, 0.96);
   border: clamp(3px, 0.24vw, 4px) solid #f0aa78;
   box-shadow:
@@ -650,6 +821,9 @@ button {
   cursor: pointer;
   flex: 0 0 12%;
   font-size: clamp(25px, 1.8vw, 32px);
+  transition:
+    filter 120ms ease,
+    transform 120ms ease;
 }
 
 .raise-hand {
@@ -690,16 +864,22 @@ button {
   transform: translateY(-2px);
 }
 
+.raise-hand.raised {
+  animation: raised-pulse 1.45s ease-in-out infinite;
+}
+
 .raise-hand.raised img {
-  transform: translateY(-4px) scale(1.12);
+  animation: hand-wave 900ms steps(2, end) infinite;
 }
 
-@media (max-width: 999px) {
-  body {
-    overflow-x: auto;
-  }
-
-  .screen {
-    width: 1000px;
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 1ms !important;
   }
 }
+
