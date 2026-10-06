@@ -84,7 +84,7 @@ def explain_prompt(state: TeacherState, previous: list[str] | None = None) -> st
     topic = state["outline"][index]
     count = personality.segments_per_topic
     questions = question_count(count, personality.questions_per_topic)
-    covered = [t["title"] for i, t in enumerate(state["outline"]) if i < index]
+    covered = [state["outline"][i]["title"] for i in state["completed_topics"] if i != index]
 
     lines = [
         f'Explain topic {index + 1} of {len(state["outline"])}: "{topic["title"]}".',
@@ -97,7 +97,7 @@ def explain_prompt(state: TeacherState, previous: list[str] | None = None) -> st
         "",
     ]
 
-    if index == 0 and not previous:
+    if not state["history"] and previous is None:
         lines.append(
             "This is the very start of the lecture: begin the first segment by greeting "
             "the student, introducing yourself by name, and saying what today's lecture is about."
@@ -108,11 +108,11 @@ def explain_prompt(state: TeacherState, previous: list[str] | None = None) -> st
             "briefly connect to the previous topic."
         )
 
-    if previous:
+    if previous is not None:
+        lines += ["", "The student asked to hear this topic explained again."]
+        if previous:
+            lines += ["Your previous explanation was:", *(f'"{segment}"' for segment in previous)]
         lines += [
-            "",
-            "The student didn't understand your previous explanation of this topic:",
-            *(f'"{segment}"' for segment in previous),
             "Explain it again differently: use simpler words, a new example or analogy, "
             "and smaller steps. Don't repeat the same sentences.",
         ]
@@ -141,8 +141,8 @@ def generate_segments(
 ) -> tuple[list[str], list[int]]:
     """The current topic's explanation as (segments, question_points).
 
-    `previous` is the last explanation, when the student asked to hear it again
-    (used by the repeat button in Step 10).
+    `previous` is set when the student asked to hear the topic again (repeat):
+    the old explanation, or [] if it's no longer available.
     """
     personality = get_personality(state["environment"])
     topic = state["outline"][state["current_topic"]]
@@ -192,24 +192,23 @@ def make_explain_node(llm: LLM):
     """
 
     def explain(state: TeacherState) -> dict:
-        segments = state["segments"]
-        points = state["question_points"]
-        segment_index = state["segment_index"]
-        if not segments:
+        if not state["segments"]:
             segments, points = generate_segments(llm, state)
-            segment_index = 0
-
-        segment_index = min(segment_index, len(segments) - 1)
-        stop = next_stop(segment_index, points, len(segments))
-        speech = segments[segment_index:stop]
-
-        return {
-            "segments": segments,
-            "question_points": points,
-            "segment_index": segment_index,
-            "speech": speech,
-            "mode": Mode.EXPLAINING,
-            "history": [{"role": "teacher", "text": " ".join(speech)}],
-        }
+            return say_part(segments, points, 0)
+        return say_part(state["segments"], state["question_points"], state["segment_index"])
 
     return explain
+
+
+def say_part(segments: list[str], points: list[int], segment_index: int) -> dict:
+    """State update that says the part of the explanation starting at segment_index."""
+    segment_index = min(segment_index, len(segments) - 1)
+    speech = segments[segment_index : next_stop(segment_index, points, len(segments))]
+    return {
+        "segments": segments,
+        "question_points": points,
+        "segment_index": segment_index,
+        "speech": speech,
+        "mode": Mode.EXPLAINING,
+        "history": [{"role": "teacher", "text": " ".join(speech)}],
+    }
