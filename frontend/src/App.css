@@ -7,7 +7,7 @@
   --line: #d89b70;
   --muted: #a99d95;
   --pixel-font: "Pixelify Sans", "Jersey 10", monospace;
-  --pixel-display: "Press Start 2P", "Pixelify Sans", monospace;
+  --pixel-display: "Jersey 10", "Pixelify Sans", monospace;
 }
 
 @keyframes header-drop {
@@ -345,8 +345,9 @@ button {
 .page-title {
   animation: small-bob 4.4s steps(4, end) infinite;
   font-family: var(--pixel-display);
-  font-size: clamp(27px, 2.65vw, 45px);
-  line-height: 1;
+  font-size: clamp(45px, 4.6vw, 78px);
+  font-weight: 400;
+  line-height: 0.82;
   margin: 0;
   text-align: center;
 }

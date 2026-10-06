@@ -1,4 +1,4 @@
-import background from '../assets/home-page/background.png'
+import background from '../assets/home-page/background.gif'
 import aboutButton from '../assets/home-page/about-button.png'
 import startButton from '../assets/home-page/start-button.png'
 import heroTitle from '../assets/hero.png'
