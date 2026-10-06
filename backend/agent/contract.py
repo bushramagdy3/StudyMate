@@ -77,27 +77,39 @@ class QuestionEvent(_Model):
     text: str = Field(min_length=1)
 
 
+class BackEvent(_Model):
+    """The student pressed "back" to leave the lecture for the outline page.
+
+    Their place is saved. segment_index is the position in the speech that was
+    playing, so an explanation resumes from exactly that segment.
+    """
+
+    type: Literal["back"] = "back"
+    segment_index: int = Field(default=0, ge=0)
+
+
 class RepeatEvent(_Model):
-    """Explain the current topic again, in a different way."""
+    """From the outline: explain a topic again, in a different way."""
 
     type: Literal["repeat"] = "repeat"
+    topic_index: int = Field(ge=0)
 
 
 class GoToTopicEvent(_Model):
-    """Jump to a topic in the outline (e.g. go back to an earlier one)."""
+    """From the outline: go to a topic (resumes it if it's the one in progress)."""
 
     type: Literal["go_to_topic"] = "go_to_topic"
     topic_index: int = Field(ge=0)
 
 
 class ContinueEvent(_Model):
-    """Move on: the current speech finished playing, carry on with the lecture."""
+    """Sent AUTOMATICALLY by the frontend when the speech finished playing (not a button)."""
 
     type: Literal["continue"] = "continue"
 
 
 class EndEvent(_Model):
-    """The student ended the session."""
+    """End the session now, with the goodbye summary (optional; it also ends after the last topic)."""
 
     type: Literal["end"] = "end"
 
@@ -107,6 +119,7 @@ StudentEvent = Annotated[
         AnswerEvent,
         RaiseHandEvent,
         QuestionEvent,
+        BackEvent,
         RepeatEvent,
         GoToTopicEvent,
         ContinueEvent,
@@ -137,7 +150,8 @@ class Awaiting(str, Enum):
     NOTHING = "nothing"  # session is over, no input expected
     ANSWER = "answer"  # show the answer box
     QUESTION = "question"  # hand is raised, show the question box
-    CONTINUE = "continue"  # after the speech plays, send a "continue" event
+    CONTINUE = "continue"  # after the speech plays, automatically send a "continue" event
+    OUTLINE = "outline"  # lecture paused: show the outline page
 
 
 class Topic(_Model):
@@ -161,6 +175,8 @@ class TeacherResponse(_Model):
     outline: list[Topic]
     current_topic: int | None = None  # None before planning or after the end
     completed_topics: list[int] = Field(default_factory=list)
+    # Only true while the teacher is explaining: show the raise-hand button then.
+    can_raise_hand: bool = False
 
     @model_validator(mode="after")
     def _topics_exist(self) -> "TeacherResponse":
