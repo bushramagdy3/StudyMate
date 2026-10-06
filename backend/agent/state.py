@@ -6,9 +6,10 @@ so it is also everything that survives between two API calls.
 
 import operator
 from enum import Enum
+from typing import Annotated, Literal, TypedDict
+
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
-from typing import Annotated, Literal, TypedDict
 
 from agent.contract import (
     Awaiting,
@@ -31,6 +32,7 @@ class Mode(str, Enum):
     FEEDBACK = "feedback"  # praise or the revealed answer is playing; continue -> lecture goes on
     AWAITING_ANSWER = "awaiting_answer"  # asked a question; waiting for the student's answer
     AWAITING_STUDENT_QUESTION = "awaiting_student_question"  # hand raised; waiting for their question
+    PAUSED = "paused"  # student pressed back and is on the outline page
     ANSWERING_STUDENT = "answering_student"  # answer to their question is playing; continue -> back to the explanation
     ENDED = "ended"
 
@@ -87,6 +89,8 @@ class TeacherState(TypedDict):
     pending_question: PendingQuestion | None
     attempts: int  # wrong answers so far to pending_question
     student_input: str | None  # latest answer or question the student typed
+    paused_mode: Mode | None  # what was happening when the student pressed back
+    paused_speech: list[str]  # what was being said then, to say again on resume
 
     # --- output of the current turn ---
     speech: list[str]  # what the teacher says now; replaced every turn
@@ -112,6 +116,8 @@ def initial_state(session_id: str, request: StartSessionRequest) -> TeacherState
         "pending_question": None,
         "attempts": 0,
         "student_input": None,
+        "paused_mode": None,
+        "paused_speech": [],
         "speech": [],
         "history": [],
         "performance": {},
@@ -143,6 +149,7 @@ _MODE_TO_UI = {
     Mode.ANSWERING_STUDENT: (AvatarState.SPEAKING, Awaiting.CONTINUE),
     Mode.AWAITING_ANSWER: (AvatarState.ASKING_QUESTION, Awaiting.ANSWER),
     Mode.AWAITING_STUDENT_QUESTION: (AvatarState.LISTENING, Awaiting.QUESTION),
+    Mode.PAUSED: (AvatarState.IDLE, Awaiting.OUTLINE),
     Mode.ENDED: (AvatarState.IDLE, Awaiting.NOTHING),
 }
 
@@ -164,6 +171,7 @@ def to_response(state: TeacherState) -> TeacherResponse:
         can_raise_hand=state["mode"] == Mode.EXPLAINING,
     )
 
+
 # Our own types that are stored in the state. LangGraph only reloads saved
 # types it has been told are safe, so they're listed here.
 SAVED_TYPES = [
@@ -171,6 +179,7 @@ SAVED_TYPES = [
     ("agent.contract", "LectureChunk"),
     ("agent.state", "Mode"),
 ]
+
 
 def make_checkpointer() -> MemorySaver:
     """The save system for sessions (Step 2's MemorySaver), allowing our types."""
