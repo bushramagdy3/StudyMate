@@ -25,17 +25,27 @@ The backend sends the extracted lecture plus the chosen environment:
 
 ## 2. Student events
 
-Every student action is sent as one event, told apart by `type`:
+Every student action is sent as one event, told apart by `type`.
+
+**During the lecture:**
 
 | Event | JSON | When |
 |---|---|---|
+| continue | `{"type": "continue"}` | **Not a button.** Sent automatically when the `speech` has finished playing, if `awaiting` is `"continue"` |
 | answer | `{"type": "answer", "text": "..."}` | Student submits an answer to the teacher's question |
-| raise_hand | `{"type": "raise_hand", "segment_index": 2}` | Student raises their hand; `segment_index` is the speech segment that was playing |
+| raise_hand | `{"type": "raise_hand", "segment_index": 2}` | Raise-hand button (only when `can_raise_hand` is true); `segment_index` is the position, from 0, in the `speech` list that was playing |
 | question | `{"type": "question", "text": "..."}` | Student submits their question after raising their hand |
-| repeat | `{"type": "repeat"}` | "Explain again" button |
-| go_to_topic | `{"type": "go_to_topic", "topic_index": 0}` | Student clicks a topic in the outline |
-| continue | `{"type": "continue"}` | The current speech has finished playing |
-| end | `{"type": "end"}` | Student ends the session |
+| back | `{"type": "back", "segment_index": 1}` | Back button: leaves for the outline page and saves the student's place; `segment_index` as for raise_hand |
+
+**On the outline page** (when `awaiting` is `"outline"`):
+
+| Event | JSON | When |
+|---|---|---|
+| go_to_topic | `{"type": "go_to_topic", "topic_index": 0}` | Student picks a topic. The topic in progress resumes exactly where they left; any other topic starts from its beginning |
+| repeat | `{"type": "repeat", "topic_index": 0}` | "Explain again" for a topic in `completed_topics` or the `current_topic`; Regina explains it differently |
+| end | `{"type": "end"}` | Optional: end the session now with the goodbye summary. The lecture also ends on its own after the last topic |
+
+Events sent at the wrong time are ignored.
 
 ## 3. What the agent returns (every turn)
 
@@ -53,7 +63,7 @@ Every student action is sent as one event, told apart by `type`:
     { "index": 1, "title": "Head-of-Line Blocking", "summary": "..." }
   ],
   "current_topic": 0,
-  "completed_topics": []
+  "completed_topics": [],
   "can_raise_hand": true
 }
 ```
@@ -61,11 +71,14 @@ Every student action is sent as one event, told apart by `type`:
 - **speech**: send each segment to TTS and play them in order.
 - **avatar_state**: `idle`, `speaking`, `listening`, `thinking` or `asking_question`.
 - **awaiting**: what the UI should allow next:
-  - `continue`: play the speech, then send `{"type": "continue"}`
+  - `continue`: play the speech, then automatically send `{"type": "continue"}`
   - `answer`: show the answer box
   - `question`: hand is raised, show the question box
+  - `outline`: lecture paused, show the outline page
   - `nothing`: the session is over
 - **outline**, **current_topic**, **completed_topics**: for the progress sidebar.
+- **can_raise_hand**: show the raise-hand button only when this is `true`
+  (while the teacher is explaining). `raise_hand` is ignored at other times.
 
 ## 4. The agent's Python interface
 
