@@ -1,30 +1,29 @@
 import repeatIcon from '../assets/generated-icons/repeat-transparent.png'
 
-const topics = [
-  'Topic 1',
-  'Topic 2',
-  'Topic 3',
-  'Topic 4',
-  'Topic 5',
-  'Topic 6',
-  'Topic 7',
-  'Topic 8'
-]
-
-export function SessionOutline({ activeTopic, onSelectTopic }) {
+export function SessionOutline({
+  completedTopics = [],
+  currentTopic,
+  onSelectTopic,
+  outline = [],
+}) {
   return (
     <aside className="session-outline" aria-label="Session outline">
       <h2>Session Outline</h2>
 
       <div className="session-topic-list">
-        {topics.map((topic, index) => (
+        {outline.map((topic) => (
           <button
-            className={activeTopic === index ? 'session-topic active' : 'session-topic'}
-            key={topic}
+            className={[
+              'session-topic',
+              currentTopic === topic.index ? 'active' : '',
+              completedTopics.includes(topic.index) ? 'completed' : '',
+            ].join(' ')}
+            key={topic.index}
             type="button"
-            onClick={() => onSelectTopic(index)}
+            onClick={() => onSelectTopic(topic.index)}
+            title={topic.summary}
           >
-            <span>{topic}</span>
+            <span>{topic.title}</span>
             <img src={repeatIcon} alt="" />
           </button>
         ))}

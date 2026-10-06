@@ -655,21 +655,21 @@ button {
 }
 
 .lecture-hall .session-avatar {
-  left: 74.8%;
+  left: 77.9%;
   top: 32.7%;
-  width: 22.5%;
+  width: 16.3%;
 }
 
 .private-tutor .session-avatar {
-  left: 64.7%;
+  left: 65.8%;
   top: 21.1%;
-  width: 19.5%;
+  width: 17.2%;
 }
 
 .study-cafe .session-avatar {
-  left: 65.1%;
+  left: 69.1%;
   top: 18.8%;
-  width: 27.4%;
+  width: 19.3%;
 }
 
 .lecture-hall .pdf-slide-slot {
@@ -772,6 +772,10 @@ button {
   border-color: #efb184;
 }
 
+.session-topic.completed:not(.active) {
+  filter: brightness(0.82);
+}
+
 .session-topic img {
   flex: 0 0 auto;
   image-rendering: pixelated;
@@ -824,6 +828,11 @@ button {
   opacity: 1;
 }
 
+.message-input:disabled {
+  cursor: not-allowed;
+  filter: brightness(0.82);
+}
+
 .message-send {
   background: linear-gradient(180deg, #fff8ea, #f6d8b1);
   border: clamp(3px, 0.24vw, 4px) solid #f3b47f;
@@ -836,6 +845,12 @@ button {
   transition:
     filter 120ms ease,
     transform 120ms ease;
+}
+
+.message-send:disabled,
+.raise-hand:disabled {
+  cursor: not-allowed;
+  filter: grayscale(0.45) brightness(0.62);
 }
 
 .raise-hand {
