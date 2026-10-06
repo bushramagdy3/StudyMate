@@ -14,7 +14,7 @@ from agent.questioning import (
     make_evaluate_answer_node,
     next_topic,
     part_just_explained,
-    record_score,
+    mark_to_improve,
     topic_finished,
 )
 from agent.state import Mode, initial_state
@@ -136,7 +136,7 @@ def test_correct_first_try_praises_and_continues():
     assert update["speech"] == ["Yes! Requests overlap."]
     assert update["mode"] is Mode.FEEDBACK
     assert update["pending_question"] is None
-    assert update["performance"] == {0: {"correct": 1, "incorrect": 0}}
+    assert "topics_to_improve" not in update  # no mistake
     assert update["history"] == [
         {"role": "student", "text": "it doesn't wait"},
         {"role": "teacher", "text": "Yes! Requests overlap."},
@@ -151,14 +151,15 @@ def test_wrong_first_try_gives_a_hint_and_waits_again():
     assert update["mode"] is Mode.AWAITING_ANSWER
     assert update["attempts"] == 1
     assert "pending_question" not in update  # same question stays
-    assert "performance" not in update  # not scored yet
+    assert update["topics_to_improve"] == [0]  # a mistake, even if they get it right next
 
 
 def test_correct_on_retry_praises():
     llm, _ = fake_llm({"correct": True, "response": "There you go!"})
-    update = make_evaluate_answer_node(llm)(answering_state(attempts=1))
+    state = answering_state(attempts=1) | {"topics_to_improve": [0]}  # wrong the first time
+    update = make_evaluate_answer_node(llm)(state)
     assert update["mode"] is Mode.FEEDBACK
-    assert update["performance"] == {0: {"correct": 1, "incorrect": 0}}
+    assert "topics_to_improve" not in update  # stays on the list
 
 
 def test_wrong_on_last_try_reveals_and_continues():
@@ -168,7 +169,7 @@ def test_wrong_on_last_try_reveals_and_continues():
     assert update["speech"] == ["The answer is that it doesn't wait."]
     assert update["mode"] is Mode.FEEDBACK
     assert update["pending_question"] is None
-    assert update["performance"] == {0: {"correct": 0, "incorrect": 1}}
+    assert update["topics_to_improve"] == [0]
 
 
 def test_empty_llm_response_uses_fallback_text():
@@ -183,12 +184,12 @@ def test_grading_failure_gives_answer_without_scoring():
 
     assert update["speech"] == [f"The answer is: {QUESTION['expected_answer']}. {QUESTION['explanation']}"]
     assert update["mode"] is Mode.FEEDBACK
-    assert "performance" not in update
+    assert "topics_to_improve" not in update  # not counted against them
 
 
-def test_record_score_adds_to_existing():
-    performance = record_score({0: {"correct": 1, "incorrect": 0}}, 0, False)
-    assert performance == {0: {"correct": 1, "incorrect": 1}}
+def test_mark_to_improve_lists_each_topic_once():
+    assert mark_to_improve([2], 0) == [0, 2]
+    assert mark_to_improve([0, 2], 0) == [0, 2]
 
 
 # --- moving on --------------------------------------------------------------

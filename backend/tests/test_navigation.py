@@ -31,8 +31,8 @@ OUTLINE = [
 QUESTION = {"question": "Why?", "expected_answer": "Because.", "explanation": "That's why."}
 
 
-def make_state(**fields):
-    request = StartSessionRequest(environment=Environment.LECTURE_HALL, lecture=[LectureChunk(slide=1, text="HTTP")])
+def make_state(environment=Environment.LECTURE_HALL, **fields):
+    request = StartSessionRequest(environment=environment, lecture=[LectureChunk(slide=1, text="HTTP")])
     state = initial_state("abc", request) | {
         "outline": OUTLINE,
         "current_topic": 0,
@@ -156,7 +156,7 @@ def test_repeat_a_finished_topic_uses_its_saved_explanation():
 
 
 def test_continue_checks():
-    for mode in (Mode.EXPLAINING, Mode.FEEDBACK, Mode.ANSWERING_STUDENT):
+    for mode in (Mode.EXPLAINING, Mode.FEEDBACK, Mode.ANSWERING_STUDENT, Mode.SUMMARIZING):
         assert can_continue(make_state(mode=mode))
     for mode in (Mode.AWAITING_ANSWER, Mode.AWAITING_STUDENT_QUESTION, Mode.ENDED):
         assert not can_continue(make_state(mode=mode))
@@ -193,16 +193,18 @@ def test_after_next_topic():
 # --- end --------------------------------------------------------------------
 
 
-def test_closing_prompt_summarises_progress():
-    state = make_state(
-        completed_topics=[0, 1],
-        performance={0: {"correct": 2, "incorrect": 0}, 1: {"correct": 1, "incorrect": 1}},
-    )
-    prompt = closing_prompt(state)
-    assert "- Pipelining: Requests without waiting." in prompt
-    assert "not covered yet: Multiplexing" in prompt
-    assert "well on: Pipelining" in prompt
-    assert "harder: Head-of-Line Blocking" in prompt
+@pytest.mark.parametrize("environment", list(Environment))
+def test_goodbye_is_short_and_names_topics_to_review(environment):
+    prompt = closing_prompt(make_state(environment=environment, completed_topics=[0, 1], topics_to_improve=[1]))
+    assert "short, warm goodbye" in prompt
+    assert "mistakes on questions about: Head-of-Line Blocking" in prompt
+    assert "Don't recap" in prompt
+    assert "Requests without waiting" not in prompt  # no recap of topic content
+
+
+def test_goodbye_without_mistakes_has_nothing_to_review():
+    prompt = closing_prompt(make_state(completed_topics=[0, 1]))
+    assert "mistakes" not in prompt and "review" not in prompt
 
 
 def test_closing_ends_the_session():
@@ -217,9 +219,8 @@ def test_closing_ends_the_session():
 
 def test_closing_fallback_when_llm_fails():
     llm, _ = fake_llm(status=503)
-    state = make_state(completed_topics=[0], performance={0: {"correct": 0, "incorrect": 1}})
+    state = make_state(completed_topics=[0], topics_to_improve=[0])
     update = make_closing_node(llm)(state)
-    assert update["speech"] == [fallback_closing(state)]
-    assert "We covered Pipelining" in update["speech"][0]
-    assert "reviewing Pipelining" in update["speech"][0]
+    assert update["speech"] == ["That's all for today. It's worth reviewing Pipelining. Great work, see you next time!"]
     assert update["mode"] is Mode.ENDED
+    assert fallback_closing(make_state()) == "That's all for today. Great work, see you next time!"

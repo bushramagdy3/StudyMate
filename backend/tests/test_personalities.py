@@ -40,3 +40,7 @@ def test_system_prompt_has_persona_and_shared_rules(environment):
 def test_personalities_have_different_prompts():
     prompts = {build_system_prompt(p) for p in PERSONALITIES.values()}
     assert len(prompts) == len(PERSONALITIES)
+
+
+def test_only_the_tutor_offers_the_summary():
+    assert [e for e in Environment if get_personality(e).offers_summary] == [Environment.STUDY_ROOM]

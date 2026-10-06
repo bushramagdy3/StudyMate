@@ -11,6 +11,7 @@ from agent.contract import (
     RepeatEvent,
     StartSessionRequest,
     StudentEvent,
+    SummaryEvent,
     TeacherResponse,
     Topic,
 )
@@ -51,6 +52,7 @@ def test_start_request_rejects_bad_input(payload):
         ({"type": "raise_hand", "segment_index": 2}, RaiseHandEvent(segment_index=2)),
         ({"type": "go_to_topic", "topic_index": 0}, GoToTopicEvent(topic_index=0)),
         ({"type": "repeat", "topic_index": 2}, RepeatEvent(topic_index=2)),
+        ({"type": "summary"}, SummaryEvent()),
     ],
 )
 def test_events_parse_by_type(payload, expected):

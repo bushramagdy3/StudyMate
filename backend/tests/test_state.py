@@ -43,6 +43,7 @@ def test_feedback_kind(correct, attempts, expected):
         (Mode.EXPLAINING, AvatarState.SPEAKING, Awaiting.CONTINUE),
         (Mode.FEEDBACK, AvatarState.SPEAKING, Awaiting.CONTINUE),
         (Mode.ANSWERING_STUDENT, AvatarState.SPEAKING, Awaiting.CONTINUE),
+        (Mode.SUMMARIZING, AvatarState.SPEAKING, Awaiting.CONTINUE),
         (Mode.AWAITING_ANSWER, AvatarState.ASKING_QUESTION, Awaiting.ANSWER),
         (Mode.AWAITING_STUDENT_QUESTION, AvatarState.LISTENING, Awaiting.QUESTION),
         (Mode.ENDED, AvatarState.IDLE, Awaiting.NOTHING),
@@ -86,3 +87,11 @@ def test_state_survives_the_checkpointer(caplog):
     assert saved["history"] == [{"role": "teacher", "text": "Welcome!"}]
     assert to_response(saved).current_topic == 0
     assert "unregistered type" not in caplog.text  # our types are allowed
+
+
+def test_summary_is_available_only_for_the_tutor():
+    tutor = initial_state("abc", REQUEST) | {"outline": [TOPIC], "current_topic": 0}
+    assert to_response(tutor).summary_available
+    assert not to_response(tutor | {"mode": Mode.ENDED}).summary_available
+    cafe = initial_state("abc", StartSessionRequest(environment=Environment.CAFE, lecture=REQUEST.lecture))
+    assert not to_response(cafe | {"outline": [TOPIC], "current_topic": 0}).summary_available

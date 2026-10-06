@@ -19,6 +19,7 @@ from agent.contract import (
     RaiseHandEvent,
     RepeatEvent,
     StartSessionRequest,
+    SummaryEvent,
 )
 from agent.llm import LLM
 from agent.teacher import EventNotAllowed, SessionNotFound, Teacher
@@ -44,8 +45,10 @@ def fake_featherless():
         prompt = json.loads(request.content)["messages"][-1]["content"]
         full = json.loads(request.content)["messages"][1]["content"]
 
-        if "lecture is ending" in full:
+        if "lecture is finished" in full:
             return text_reply("Goodbye!")
+        if "summary of the entire lecture" in full:
+            return text_reply(json.dumps({"segments": ["Summary part 1.", "Summary part 2."]}))
         if "Split this lecture" in full:
             reply = PLAN
         elif "Write the explanation" in full:
@@ -276,3 +279,26 @@ def test_no_langgraph_warnings_about_saved_types(teacher, caplog):
     teacher.send_event(session, ContinueEvent())
     teacher.send_event(session, GoToTopicEvent(topic_index=1))
     assert "unregistered type" not in caplog.text
+
+
+def test_tutor_summary_then_back_to_the_lecture(teacher):
+    first = start(teacher, Environment.STUDY_ROOM)
+    assert first.summary_available
+    session = first.session_id
+    teacher.send_event(session, ContinueEvent())  # a question is waiting
+
+    summary = teacher.send_event(session, SummaryEvent())
+    assert summary.speech == ["Summary part 1.", "Summary part 2."]
+    assert summary.awaiting is Awaiting.CONTINUE
+    assert not summary.can_raise_hand
+
+    back = teacher.send_event(session, ContinueEvent())
+    assert back.speech == ["e1-s0", "e1-s1"]  # the part the question was about
+    assert teacher.send_event(session, ContinueEvent()).speech == ["Why is it faster?"]
+
+
+def test_summary_is_not_available_for_other_personalities(teacher):
+    response = start(teacher)  # café
+    assert not response.summary_available
+    with pytest.raises(EventNotAllowed):
+        teacher.send_event(response.session_id, SummaryEvent())
