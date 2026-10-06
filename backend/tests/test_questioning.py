@@ -134,7 +134,7 @@ def test_correct_first_try_praises_and_continues():
     update = make_evaluate_answer_node(llm)(answering_state(attempts=0))
 
     assert update["speech"] == ["Yes! Requests overlap."]
-    assert update["mode"] is Mode.EXPLAINING
+    assert update["mode"] is Mode.FEEDBACK
     assert update["pending_question"] is None
     assert update["performance"] == {0: {"correct": 1, "incorrect": 0}}
     assert update["history"] == [
@@ -157,7 +157,7 @@ def test_wrong_first_try_gives_a_hint_and_waits_again():
 def test_correct_on_retry_praises():
     llm, _ = fake_llm({"correct": True, "response": "There you go!"})
     update = make_evaluate_answer_node(llm)(answering_state(attempts=1))
-    assert update["mode"] is Mode.EXPLAINING
+    assert update["mode"] is Mode.FEEDBACK
     assert update["performance"] == {0: {"correct": 1, "incorrect": 0}}
 
 
@@ -166,7 +166,7 @@ def test_wrong_on_last_try_reveals_and_continues():
     update = make_evaluate_answer_node(llm)(answering_state(attempts=1, answer="no idea"))
 
     assert update["speech"] == ["The answer is that it doesn't wait."]
-    assert update["mode"] is Mode.EXPLAINING
+    assert update["mode"] is Mode.FEEDBACK
     assert update["pending_question"] is None
     assert update["performance"] == {0: {"correct": 0, "incorrect": 1}}
 
@@ -182,7 +182,7 @@ def test_grading_failure_gives_answer_without_scoring():
     update = make_evaluate_answer_node(llm)(answering_state())
 
     assert update["speech"] == [f"The answer is: {QUESTION['expected_answer']}. {QUESTION['explanation']}"]
-    assert update["mode"] is Mode.EXPLAINING
+    assert update["mode"] is Mode.FEEDBACK
     assert "performance" not in update
 
 

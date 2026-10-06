@@ -117,9 +117,22 @@ def test_prompt_uses_personality_slides_and_greeting():
 
 
 def test_later_topics_connect_to_covered_ones_without_greeting():
-    prompt = explain_prompt(make_state(topic=1))
+    state = make_state(topic=1, completed_topics=[0], history=[{"role": "teacher", "text": "Hi"}])
+    prompt = explain_prompt(state)
     assert "Already covered: Pipelining" in prompt
     assert "greeting" not in prompt
+
+
+def test_jumping_ahead_doesnt_count_skipped_topics_as_covered():
+    prompt = explain_prompt(make_state(topic=1, history=[{"role": "teacher", "text": "Hi"}]))
+    assert "Already covered" not in prompt
+
+
+def test_going_back_to_the_first_topic_doesnt_greet_again():
+    state = make_state(topic=0, completed_topics=[0, 1], history=[{"role": "teacher", "text": "Hi"}])
+    prompt = explain_prompt(state)
+    assert "greeting" not in prompt
+    assert "Already covered: Head-of-Line Blocking" in prompt
 
 
 def test_repeat_asks_for_a_different_explanation():
