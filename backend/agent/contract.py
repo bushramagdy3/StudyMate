@@ -84,6 +84,15 @@ class RepeatEvent(_Model):
     topic_index: int = Field(ge=0)
 
 
+class SummaryEvent(_Model):
+    """The student clicked "Summary" at the top of the outline (private tutor only).
+
+    Regina summarises the whole lecture, then the lecture continues where they were.
+    """
+
+    type: Literal["summary"] = "summary"
+
+
 class GoToTopicEvent(_Model):
     """The student clicked a topic's name in the outline.
 
@@ -107,6 +116,7 @@ StudentEvent = Annotated[
         RaiseHandEvent,
         QuestionEvent,
         RepeatEvent,
+        SummaryEvent,
         GoToTopicEvent,
         ContinueEvent,
     ],
@@ -161,6 +171,8 @@ class TeacherResponse(_Model):
     completed_topics: list[int] = Field(default_factory=list)
     # Only true while the teacher is explaining: show the raise-hand button then.
     can_raise_hand: bool = False
+    # Show "Summary" at the top of the outline (only the private tutor has it).
+    summary_available: bool = False
 
     @model_validator(mode="after")
     def _topics_exist(self) -> "TeacherResponse":

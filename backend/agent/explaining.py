@@ -243,12 +243,13 @@ def save_progress(state: TeacherState) -> dict:
     return progress
 
 
-def enter_topic(state: TeacherState, topic: int, progress: dict) -> dict:
+def enter_topic(state: TeacherState, topic: int, progress: dict, restart_current: bool = True) -> dict:
     """State update that makes `topic` the current one.
 
     - never started: segments are cleared, so the explain node writes them;
     - left halfway: resumes where the student left it;
     - finished (or it's the topic they're in): from the start, same explanation.
+      With restart_current=False the topic they're in resumes instead (after the summary).
     """
     update = {
         "current_topic": topic,
@@ -262,6 +263,6 @@ def enter_topic(state: TeacherState, topic: int, progress: dict) -> dict:
 
     start = saved["segment_index"]
     finished = topic in state["completed_topics"] or start >= len(saved["segments"])
-    if finished or topic == state["current_topic"]:
+    if finished or (restart_current and topic == state["current_topic"]):
         start = 0
     return update | say_part(saved["segments"], saved["question_points"], start)

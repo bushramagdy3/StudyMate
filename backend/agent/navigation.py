@@ -14,7 +14,8 @@ speech has finished playing. Where it leads, by what was just said:
     EXPLAINING         -> ask a question about that part
     FEEDBACK           -> next part of the topic, or the next topic
     ANSWERING_STUDENT  -> back to the explanation, from the interrupted segment
-After the last topic, the lecture ends with a goodbye summary.
+    SUMMARIZING        -> back to where the student was (see summary.py)
+After the last topic, Regina says a short goodbye, naming topics to review.
 
 Each action has a check (can the student do it right now?). Step 11 rejects
 an action when its check says no.
@@ -95,7 +96,7 @@ def make_repeat_node(llm: LLM):
 # Continue (the current speech finished playing)
 # ---------------------------------------------------------------------------
 
-CONTINUABLE = {Mode.EXPLAINING, Mode.FEEDBACK, Mode.ANSWERING_STUDENT}
+CONTINUABLE = {Mode.EXPLAINING, Mode.FEEDBACK, Mode.ANSWERING_STUDENT, Mode.SUMMARIZING}
 
 
 def can_continue(state: TeacherState) -> bool:
@@ -131,45 +132,24 @@ def after_next_topic(state: TeacherState) -> str:
 
 
 def closing_prompt(state: TeacherState) -> str:
+    """A short goodbye, naming the topics to review if the student made mistakes."""
     outline = state["outline"]
-    completed = [i for i in state["completed_topics"] if i < len(outline)]
-    not_covered = [t["title"] for i, t in enumerate(outline) if i not in completed]
-    hard = [outline[i]["title"] for i, s in sorted(state["performance"].items()) if s["incorrect"] > 0]
-    good = [outline[i]["title"] for i, s in sorted(state["performance"].items())
-            if s["correct"] > 0 and s["incorrect"] == 0]
-
-    lines = ["The lecture is ending now."]
-    if completed:
-        lines += ["Topics covered, with their main ideas:"]
-        lines += [f"- {outline[i]['title']}: {outline[i]['summary']}" for i in completed]
-    else:
-        lines += ["The student ended before finishing any topic."]
-    if not_covered:
-        lines += ["Topics not covered yet: " + ", ".join(not_covered)]
-    if good:
-        lines += ["The student answered questions well on: " + ", ".join(good)]
-    if hard:
-        lines += ["The student found these harder: " + ", ".join(hard)]
-
-    lines += [
-        "",
-        "Say goodbye in 3 to 5 spoken sentences:",
-        "- briefly recap the main ideas covered,",
-        "- mention what they did well, if anything,",
-        "- if there were harder topics, encourage them to review those,",
-        "- if some topics weren't covered, mention they can continue with those next time.",
-    ]
+    to_review = [outline[i]["title"] for i in state["topics_to_improve"] if i < len(outline)]
+    lines = ["The lecture is finished. Say a short, warm goodbye in 1 to 3 spoken sentences."]
+    if to_review:
+        lines.append(
+            "The student made mistakes on questions about: " + ", ".join(to_review) + ". "
+            "Name these topics and encourage them to review them."
+        )
+    lines.append("Don't recap the lecture, and don't praise specific topics or mention scores.")
     return "\n".join(lines)
 
 
 def fallback_closing(state: TeacherState) -> str:
-    covered = [state["outline"][i]["title"] for i in state["completed_topics"]]
     text = "That's all for today. "
-    if covered:
-        text += f"We covered {', '.join(covered)}. "
-    hard = [state["outline"][i]["title"] for i, s in state["performance"].items() if s["incorrect"] > 0]
-    if hard:
-        text += f"It's worth reviewing {', '.join(hard)}. "
+    to_review = [state["outline"][i]["title"] for i in state["topics_to_improve"]]
+    if to_review:
+        text += f"It's worth reviewing {', '.join(to_review)}. "
     return text + "Great work, see you next time!"
 
 

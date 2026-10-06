@@ -13,6 +13,7 @@ comes back to "wait" and pauses again.
     wait --question-->    take_question -> answer_student_question
     wait --go_to_topic--> go_to_topic -> (explain if it's never been started)
     wait --repeat-->      choose_repeat -> repeat
+    wait --summary-->     summary   (then continue -> back_to_lecture -> where they were)
     ... and every path ends back at wait. After the last topic: closing.
 
 Usage (e.g. from FastAPI):
@@ -47,6 +48,7 @@ from agent.navigation import (
 from agent.planning import make_plan_node
 from agent.questioning import make_ask_question_node, make_evaluate_answer_node, next_topic
 from agent.state import Mode, TeacherState, initial_state, make_checkpointer, to_response
+from agent.summary import after_back_to_lecture, back_to_lecture, can_summarize, make_summary_node
 
 
 class SessionNotFound(Exception):
@@ -76,6 +78,8 @@ def is_allowed(state: TeacherState, event: dict) -> bool:
         return can_go_to_topic(state, event["topic_index"])
     if kind == "repeat":
         return can_repeat(state, event["topic_index"])
+    if kind == "summary":
+        return can_summarize(state)
     return False
 
 
@@ -92,6 +96,8 @@ def wait(state: TeacherState) -> dict:
 
 def route_event(state: TeacherState) -> str:
     """After wait: which node handles the event."""
+    if state["event"]["type"] == "continue" and state["mode"] == Mode.SUMMARIZING:
+        return "back_to_lecture"
     return {
         "continue": "continue",
         "answer": "take_answer",
@@ -99,6 +105,7 @@ def route_event(state: TeacherState) -> str:
         "question": "take_question",
         "go_to_topic": "go_to_topic",
         "repeat": "choose_repeat",
+        "summary": "summary",
     }[state["event"]["type"]]
 
 
@@ -135,6 +142,8 @@ def build_graph(llm: LLM, checkpointer=None):
     graph.add_node("repeat", make_repeat_node(llm))
     graph.add_node("next_topic", next_topic)
     graph.add_node("closing", make_closing_node(llm))
+    graph.add_node("summary", make_summary_node(llm))
+    graph.add_node("back_to_lecture", back_to_lecture)
 
     # Waiting, and handling events
     graph.add_node("wait", wait)
@@ -153,7 +162,10 @@ def build_graph(llm: LLM, checkpointer=None):
     graph.add_conditional_edges(
         "wait",
         route_event,
-        ["continue", "take_answer", "raise_hand", "take_question", "go_to_topic", "choose_repeat"],
+        [
+            "continue", "take_answer", "raise_hand", "take_question",
+            "go_to_topic", "choose_repeat", "summary", "back_to_lecture",
+        ],
     )
     graph.add_conditional_edges("continue", after_continue, ["ask_question", "explain", "next_topic"])
     graph.add_conditional_edges("next_topic", after_next_topic, ["explain", "wait", "closing"])
@@ -161,11 +173,12 @@ def build_graph(llm: LLM, checkpointer=None):
     graph.add_edge("take_question", "answer_student_question")
     graph.add_conditional_edges("go_to_topic", after_entering_topic, ["explain", "wait", "closing"])
     graph.add_edge("choose_repeat", "repeat")
+    graph.add_conditional_edges("back_to_lecture", after_back_to_lecture, ["explain", "wait", "next_topic"])
 
     # Everything that speaks goes back to waiting
     for node in [
         "explain", "ask_question", "evaluate_answer", "answer_student_question",
-        "raise_hand", "repeat", "closing",
+        "raise_hand", "repeat", "closing", "summary",
     ]:
         graph.add_edge(node, "wait")
 

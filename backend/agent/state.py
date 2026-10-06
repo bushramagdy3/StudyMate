@@ -20,6 +20,7 @@ from agent.contract import (
     TeacherResponse,
     Topic,
 )
+from agent.personalities import get_personality
 
 # How many tries the student gets per question: one answer plus one retry.
 MAX_ATTEMPTS = 2
@@ -32,6 +33,7 @@ class Mode(str, Enum):
     FEEDBACK = "feedback"  # praise or the revealed answer is playing; continue -> lecture goes on
     AWAITING_ANSWER = "awaiting_answer"  # asked a question; waiting for the student's answer
     AWAITING_STUDENT_QUESTION = "awaiting_student_question"  # hand raised; waiting for their question
+    SUMMARIZING = "summarizing"  # the lecture summary is playing; continue -> back to the lecture
     ANSWERING_STUDENT = "answering_student"  # answer to their question is playing; continue -> back to the explanation
     ENDED = "ended"
 
@@ -70,11 +72,6 @@ class Message(TypedDict):
     text: str
 
 
-class TopicScore(TypedDict):
-    correct: int
-    incorrect: int
-
-
 class TeacherState(TypedDict):
     # --- set once at the start ---
     session_id: str
@@ -104,7 +101,8 @@ class TeacherState(TypedDict):
 
     # --- memory ---
     history: Annotated[list[Message], operator.add]  # appended to, never replaced
-    performance: dict[int, TopicScore]  # per topic, for the end-of-session summary
+    topics_to_improve: list[int]  # topics with any wrong answer (even if right on the retry)
+    summary: list[str]  # the lecture summary, once written (reused on later clicks)
 
 
 def initial_state(session_id: str, request: StartSessionRequest) -> TeacherState:
@@ -127,7 +125,8 @@ def initial_state(session_id: str, request: StartSessionRequest) -> TeacherState
         "topic_progress": {},
         "speech": [],
         "history": [],
-        "performance": {},
+        "topics_to_improve": [],
+        "summary": [],
     }
 
 
@@ -154,6 +153,7 @@ _MODE_TO_UI = {
     Mode.EXPLAINING: (AvatarState.SPEAKING, Awaiting.CONTINUE),
     Mode.FEEDBACK: (AvatarState.SPEAKING, Awaiting.CONTINUE),
     Mode.ANSWERING_STUDENT: (AvatarState.SPEAKING, Awaiting.CONTINUE),
+    Mode.SUMMARIZING: (AvatarState.SPEAKING, Awaiting.CONTINUE),
     Mode.AWAITING_ANSWER: (AvatarState.ASKING_QUESTION, Awaiting.ANSWER),
     Mode.AWAITING_STUDENT_QUESTION: (AvatarState.LISTENING, Awaiting.QUESTION),
     Mode.ENDED: (AvatarState.IDLE, Awaiting.NOTHING),
@@ -175,6 +175,8 @@ def to_response(state: TeacherState) -> TeacherResponse:
         current_topic=state["current_topic"],
         completed_topics=state["completed_topics"],
         can_raise_hand=state["mode"] == Mode.EXPLAINING,
+        summary_available=get_personality(state["environment"]).offers_summary
+        and state["mode"] != Mode.ENDED,
     )
 
 

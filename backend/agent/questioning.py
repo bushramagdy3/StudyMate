@@ -23,7 +23,6 @@ from agent.state import (
     OutlineTopic,
     PendingQuestion,
     TeacherState,
-    TopicScore,
     feedback_kind,
 )
 
@@ -161,10 +160,9 @@ def fallback_feedback(question: PendingQuestion, kind: str) -> str:
     return f"Not quite. The answer is: {question['expected_answer']}. {question['explanation']}"
 
 
-def record_score(performance: dict[int, TopicScore], topic: int, correct: bool) -> dict[int, TopicScore]:
-    score = performance.get(topic, TopicScore(correct=0, incorrect=0))
-    key = "correct" if correct else "incorrect"
-    return {**performance, topic: {**score, key: score[key] + 1}}
+def mark_to_improve(topics_to_improve: list[int], topic: int) -> list[int]:
+    """Add a topic the student got an answer wrong in (each topic listed once)."""
+    return sorted(set(topics_to_improve) | {topic})
 
 
 def make_evaluate_answer_node(llm: LLM):
@@ -198,18 +196,16 @@ def make_evaluate_answer_node(llm: LLM):
             "speech": [text],
             "history": student_line + [{"role": "teacher", "text": text}],
         }
+        if not result.correct:
+            # Any mistake makes it a topic to improve on, even if they get it right on the retry.
+            update["topics_to_improve"] = mark_to_improve(state["topics_to_improve"], state["current_topic"])
 
         if kind == "hint":
             # Same question, one more try.
             return update | {"attempts": state["attempts"] + 1, "mode": Mode.AWAITING_ANSWER}
 
         # praise or reveal: the question is done, the lecture continues.
-        return update | {
-            "pending_question": None,
-            "attempts": 0,
-            "mode": Mode.FEEDBACK,
-            "performance": record_score(state["performance"], state["current_topic"], kind == "praise"),
-        }
+        return update | {"pending_question": None, "attempts": 0, "mode": Mode.FEEDBACK}
 
     return evaluate_answer
 

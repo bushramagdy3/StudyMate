@@ -21,6 +21,7 @@ class Personality:
     hint_style: str  # how to give a hint after a wrong answer
     segments_per_topic: int  # how many short speech segments per topic explanation
     questions_per_topic: int  # how many questions to ask per topic
+    offers_summary: bool = False  # "Summary" item at the top of the outline (tutor only)
 
 
 PROFESSOR = Personality(
@@ -69,6 +70,7 @@ TUTOR = Personality(
     hint_style="Give a small step-by-step nudge, building on what the student already said.",
     segments_per_topic=3,
     questions_per_topic=2,
+    offers_summary=True,
 )
 
 STUDY_FRIEND = Personality(
