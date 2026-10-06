@@ -1,7 +1,7 @@
 import logo from '../assets/logo.png'
 import heroTitle from '../assets/hero.png'
 
-export function Header({ isSession = false, onEndSession, onHome }) {
+export function Header({ isSession = false, onAbout, onEndSession, onHome }) {
   return (
     <header className="site-header">
       <button className="brand-button" type="button" onClick={onHome}>
@@ -10,7 +10,7 @@ export function Header({ isSession = false, onEndSession, onHome }) {
       </button>
 
       <nav className="header-links" aria-label="Main navigation">
-        <button className="header-link" type="button">
+        <button className="header-link" type="button" onClick={onAbout}>
           About
         </button>
 

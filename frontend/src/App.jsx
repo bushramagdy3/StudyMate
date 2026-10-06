@@ -1,6 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import './App.css'
+import { AboutPopup } from './components/AboutPopup.jsx'
 import { Header } from './components/Header.jsx'
+import { LoadingPopup } from './components/LoadingPopup.jsx'
 import { environments } from './data/environments.js'
 import { ChooseEnvironmentPage } from './pages/ChooseEnvironmentPage.jsx'
 import { HomePage } from './pages/HomePage.jsx'
@@ -29,6 +31,9 @@ function getInitialEnvironmentId() {
 
 function App() {
   const [page, setPage] = useState(getInitialPage)
+  const [isAboutOpen, setIsAboutOpen] = useState(false)
+  const [isLoadingSession, setIsLoadingSession] = useState(false)
+  const loadingTimer = useRef(null)
   const [pdfName, setPdfName] = useState(
     () => new URLSearchParams(window.location.search).get('file') || '',
   )
@@ -37,6 +42,12 @@ function App() {
   const selectedEnvironment =
     environments.find((environment) => environment.id === environmentId) ||
     environments[0]
+
+  useEffect(() => {
+    return () => {
+      window.clearTimeout(loadingTimer.current)
+    }
+  }, [])
 
   function goToPage(nextPage, nextEnvironmentId = environmentId) {
     if (nextPage === 'session' && !environmentExists(nextEnvironmentId)) {
@@ -50,16 +61,32 @@ function App() {
     setPage(nextPage)
   }
 
+  function openSessionAfterLoading() {
+    if (!environmentExists(environmentId)) {
+      return
+    }
+
+    window.clearTimeout(loadingTimer.current)
+    setIsLoadingSession(true)
+
+    loadingTimer.current = window.setTimeout(() => {
+      setIsLoadingSession(false)
+      goToPage('session', environmentId)
+    }, 10000)
+  }
+
   return (
     <>
       <Header
         isSession={page === 'session'}
+        onAbout={() => setIsAboutOpen(true)}
         onEndSession={() => goToPage('home')}
         onHome={() => goToPage('home')}
       />
 
       {page === 'home' && (
         <HomePage
+          onAbout={() => setIsAboutOpen(true)}
           onStart={() => goToPage('upload')}
         />
       )}
@@ -79,12 +106,20 @@ function App() {
           selectedEnvironmentId={environmentId}
           onSelectEnvironment={setEnvironmentId}
           onBack={() => goToPage('upload')}
-          onContinue={() => goToPage('session', environmentId)}
+          onContinue={openSessionAfterLoading}
         />
       )}
 
       {page === 'session' && (
         <SessionPage environment={selectedEnvironment} />
+      )}
+
+      {isAboutOpen && (
+        <AboutPopup onClose={() => setIsAboutOpen(false)} />
+      )}
+
+      {isLoadingSession && (
+        <LoadingPopup />
       )}
     </>
   )

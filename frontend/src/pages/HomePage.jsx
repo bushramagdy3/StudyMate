@@ -4,7 +4,7 @@ import startButton from '../assets/home-page/start-button.png'
 import heroTitle from '../assets/hero.png'
 import { Screen } from '../components/Screen.jsx'
 
-export function HomePage({ onStart }) {
+export function HomePage({ onAbout, onStart }) {
   return (
     <Screen background={background} className="home-page">
       <section className="home-content">
@@ -20,7 +20,7 @@ export function HomePage({ onStart }) {
           <button className="asset-button home-start" type="button" onClick={onStart}>
             <img src={startButton} alt="Start" />
           </button>
-          <button className="asset-button home-about" type="button">
+          <button className="asset-button home-about" type="button" onClick={onAbout}>
             <img src={aboutButton} alt="About" />
           </button>
         </div>
