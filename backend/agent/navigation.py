@@ -1,11 +1,13 @@
-"""Step 10: leaving to the outline, repeat, go to a topic, continue, and the end.
+"""Step 10: clicking topics in the outline, repeat, continue, and the end.
 
-During a lecture the student has one button, "back": it saves exactly where
-they are and shows the outline page. From the outline they can:
-- go to a topic: resumes exactly where they left if it's the topic in
-  progress, otherwise teaches that topic from the start;
-- repeat a topic they've already been taught (or the one in progress):
-  Regina explains it again, differently.
+The outline is on the same page as the lecture, so the student can use it
+at any time during the lecture:
+- click a topic's name: a topic left halfway resumes where they left it; a
+  finished topic (or the one they're in) is explained again the same way; a
+  topic not reached yet is taught;
+- repeat button on a topic they've been taught: Regina explains it again,
+  differently (a new explanation from the LLM).
+Ending the session is handled by Teacher.end_session(): it deletes everything.
 
 "continue" is not a button: the frontend sends it automatically when the
 speech has finished playing. Where it leads, by what was just said:
@@ -14,119 +16,79 @@ speech has finished playing. Where it leads, by what was just said:
     ANSWERING_STUDENT  -> back to the explanation, from the interrupted segment
 After the last topic, the lecture ends with a goodbye summary.
 
-Each action has a check (can the student do it right now?). Step 11 wires
-them into the graph and ignores an action when its check says no.
+Each action has a check (can the student do it right now?). Step 11 rejects
+an action when its check says no.
 """
 
-from agent.explaining import generate_segments, next_stop, say_part
+from agent.explaining import enter_topic, generate_segments, next_stop, save_progress, say_part
 from agent.llm import LLM, LLMError, messages
 from agent.personalities import build_system_prompt, get_personality
 from agent.questioning import topic_finished
 from agent.state import Mode, TeacherState
 
 # ---------------------------------------------------------------------------
-# Back (leave the lecture for the outline page)
-# ---------------------------------------------------------------------------
-
-
-def can_go_back(state: TeacherState) -> bool:
-    return state["mode"] not in (Mode.PAUSED, Mode.ENDED)
-
-
-def go_back(state: TeacherState, segment_index: int = 0) -> dict:
-    """Pause the lecture and remember exactly where the student was.
-
-    segment_index is the position in the speech that was playing; during an
-    explanation, the lecture resumes from that segment.
-    """
-    update = {
-        "mode": Mode.PAUSED,
-        "paused_mode": state["mode"],
-        "paused_speech": state["speech"],
-        "speech": [],
-    }
-    if state["mode"] == Mode.EXPLAINING:
-        start = state["segment_index"]
-        part_end = next_stop(start, state["question_points"], len(state["segments"]))
-        update["segment_index"] = max(start, min(start + segment_index, part_end - 1))
-    return update
-
-
-def resume(state: TeacherState) -> dict:
-    """Continue exactly where the student pressed back."""
-    if state["paused_mode"] == Mode.EXPLAINING:
-        update = say_part(state["segments"], state["question_points"], state["segment_index"])
-        update.pop("history")  # it was already said once
-    else:
-        update = {"mode": state["paused_mode"], "speech": state["paused_speech"]}
-    return update | {"paused_mode": None, "paused_speech": []}
-
-
-# ---------------------------------------------------------------------------
-# Go to a topic (from the outline)
+# Clicking a topic's name
 # ---------------------------------------------------------------------------
 
 
 def can_go_to_topic(state: TeacherState, topic_index: int) -> bool:
-    return state["mode"] == Mode.PAUSED and 0 <= topic_index < len(state["outline"])
+    return state["mode"] != Mode.ENDED and 0 <= topic_index < len(state["outline"])
 
 
 def go_to_topic(state: TeacherState, topic_index: int) -> dict:
-    """From the outline: resume the topic in progress, or start another one.
+    """Switch to a topic, saving where the student was in the current one.
 
-    For another topic, the explain node then teaches it from the start.
-    Topics already completed stay ticked; a waiting question is dropped.
+    A waiting question (or a raised hand) is dropped.
     """
-    if topic_index == state["current_topic"] and state["segments"]:
-        return resume(state)
-    return {
-        "current_topic": topic_index,
-        "segments": [],
-        "question_points": [],
-        "segment_index": 0,
-        "pending_question": None,
-        "attempts": 0,
-        "paused_mode": None,
-        "paused_speech": [],
-    }
+    return enter_topic(state, topic_index, save_progress(state))
+
+
+def after_entering_topic(state: TeacherState) -> str:
+    """A topic never started still needs explaining; a saved one is already set up."""
+    if state["current_topic"] is None:
+        return "closing"
+    return "explain" if not state["segments"] else "wait"
 
 
 # ---------------------------------------------------------------------------
-# Repeat (from the outline)
+# Repeat button
 # ---------------------------------------------------------------------------
+
+
+def taught_topics(state: TeacherState) -> set[int]:
+    taught = set(state["completed_topics"]) | set(state["topic_progress"])
+    if state["current_topic"] is not None and state["segments"]:
+        taught.add(state["current_topic"])
+    return taught
 
 
 def can_repeat(state: TeacherState, topic_index: int) -> bool:
-    """Only from the outline, for topics already taught or the one in progress."""
-    taught = set(state["completed_topics"]) | {state["current_topic"]}
-    return state["mode"] == Mode.PAUSED and topic_index in taught and topic_index < len(state["outline"])
+    """For topics the student has been taught (finished, left halfway, or current)."""
+    return state["mode"] != Mode.ENDED and topic_index in taught_topics(state)
+
+
+def choose_topic_to_repeat(state: TeacherState, topic_index: int) -> dict:
+    """Make the topic current, with its old explanation in `segments` for the repeat node."""
+    progress = save_progress(state)
+    return {
+        "current_topic": topic_index,
+        "topic_progress": progress,
+        "segments": progress.get(topic_index, {}).get("segments", []),
+    }
 
 
 def make_repeat_node(llm: LLM):
-    """The 'repeat' node: explains state["current_topic"] again, differently, from the start.
+    """The 'repeat' node: explains the current topic again, differently, from the start.
 
-    Step 11 sets current_topic to the chosen topic first (keeping the old
-    segments if it's the topic in progress, so Regina can avoid repeating them).
+    `segments` holds the old explanation (set by choose_topic_to_repeat), so
+    the LLM can avoid repeating it. A waiting question is dropped.
     """
 
     def repeat(state: TeacherState) -> dict:
         segments, points = generate_segments(llm, state, previous=state["segments"])
-        return {
-            "pending_question": None,
-            "attempts": 0,
-            "paused_mode": None,
-            "paused_speech": [],
-            **say_part(segments, points, 0),
-        }
+        return {"pending_question": None, "attempts": 0, **say_part(segments, points, 0)}
 
     return repeat
-
-
-def choose_topic_to_repeat(state: TeacherState, topic_index: int) -> dict:
-    """Set up repeating a topic: keep its old explanation only if it's the one in progress."""
-    if topic_index == state["current_topic"]:
-        return {}
-    return {"current_topic": topic_index, "segments": [], "question_points": [], "segment_index": 0}
 
 
 # ---------------------------------------------------------------------------
@@ -159,17 +121,13 @@ def after_continue(state: TeacherState) -> str:
 
 
 def after_next_topic(state: TeacherState) -> str:
-    """After a topic is done: explain the next one, or finish the lecture."""
-    return "closing" if state["current_topic"] is None else "explain"
+    """After a topic is done: the next topic (explained or resumed), or the goodbye."""
+    return after_entering_topic(state)
 
 
 # ---------------------------------------------------------------------------
 # End of the lecture
 # ---------------------------------------------------------------------------
-
-
-def can_end(state: TeacherState) -> bool:
-    return state["mode"] != Mode.ENDED
 
 
 def closing_prompt(state: TeacherState) -> str:

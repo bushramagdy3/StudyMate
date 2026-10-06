@@ -212,3 +212,56 @@ def say_part(segments: list[str], points: list[int], segment_index: int) -> dict
         "mode": Mode.EXPLAINING,
         "history": [{"role": "teacher", "text": " ".join(speech)}],
     }
+
+
+# ---------------------------------------------------------------------------
+# Remembering each topic (for clicking topics in the outline)
+# ---------------------------------------------------------------------------
+
+
+def resume_index(state: TeacherState) -> int:
+    """Where to pick the current topic up again later.
+
+    During a question, go back to the start of the part it's about, so the
+    student hears that part again and then gets the question.
+    """
+    if state["mode"] == Mode.AWAITING_ANSWER:
+        return max((p for p in state["question_points"] if p < state["segment_index"]), default=0)
+    return state["segment_index"]
+
+
+def save_progress(state: TeacherState) -> dict:
+    """topic_progress, with the current topic's explanation and position saved."""
+    progress = dict(state["topic_progress"])
+    topic = state["current_topic"]
+    if topic is not None and state["segments"]:
+        progress[topic] = {
+            "segments": state["segments"],
+            "question_points": state["question_points"],
+            "segment_index": resume_index(state),
+        }
+    return progress
+
+
+def enter_topic(state: TeacherState, topic: int, progress: dict) -> dict:
+    """State update that makes `topic` the current one.
+
+    - never started: segments are cleared, so the explain node writes them;
+    - left halfway: resumes where the student left it;
+    - finished (or it's the topic they're in): from the start, same explanation.
+    """
+    update = {
+        "current_topic": topic,
+        "topic_progress": progress,
+        "pending_question": None,
+        "attempts": 0,
+    }
+    saved = progress.get(topic)
+    if saved is None:
+        return update | {"segments": [], "question_points": [], "segment_index": 0}
+
+    start = saved["segment_index"]
+    finished = topic in state["completed_topics"] or start >= len(saved["segments"])
+    if finished or topic == state["current_topic"]:
+        start = 0
+    return update | say_part(saved["segments"], saved["question_points"], start)

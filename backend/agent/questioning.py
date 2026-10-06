@@ -14,6 +14,7 @@ The rule for the response is feedback_kind() from state.py:
 
 from pydantic import BaseModel, Field
 
+from agent.explaining import enter_topic, save_progress
 from agent.llm import LLM, LLMError, messages
 from agent.personalities import build_system_prompt, get_personality
 from agent.state import (
@@ -187,7 +188,7 @@ def make_evaluate_answer_node(llm: LLM):
                 "speech": [text],
                 "pending_question": None,
                 "attempts": 0,
-                "mode": Mode.EXPLAINING,
+                "mode": Mode.FEEDBACK,
                 "history": student_line + [{"role": "teacher", "text": text}],
             }
 
@@ -206,7 +207,7 @@ def make_evaluate_answer_node(llm: LLM):
         return update | {
             "pending_question": None,
             "attempts": 0,
-            "mode": Mode.EXPLAINING,
+            "mode": Mode.FEEDBACK,
             "performance": record_score(state["performance"], state["current_topic"], kind == "praise"),
         }
 
@@ -224,16 +225,17 @@ def topic_finished(state: TeacherState) -> bool:
 
 
 def next_topic(state: TeacherState) -> dict:
-    """The 'next_topic' node: marks the topic done and moves to the next one.
+    """The 'next_topic' node: marks the topic done and moves on.
 
-    current_topic becomes None after the last topic, which means the lecture is over.
+    Goes to the first topic not finished yet (resuming it if it was left
+    halfway), so replaying an old topic brings the student back to where they
+    were. current_topic becomes None when every topic is done: the lecture is over.
     """
-    done = state["current_topic"]
-    following = done + 1 if done + 1 < len(state["outline"]) else None
-    return {
-        "completed_topics": sorted(set(state["completed_topics"]) | {done}),
-        "current_topic": following,
-        "segments": [],
-        "question_points": [],
-        "segment_index": 0,
-    }
+    completed = sorted(set(state["completed_topics"]) | {state["current_topic"]})
+    progress = save_progress(state)
+    remaining = [i for i in range(len(state["outline"])) if i not in completed]
+    if not remaining:
+        return {"completed_topics": completed, "current_topic": None, "topic_progress": progress}
+    return {"completed_topics": completed} | enter_topic(
+        state | {"completed_topics": completed}, remaining[0], progress
+    )

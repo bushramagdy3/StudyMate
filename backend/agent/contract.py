@@ -77,26 +77,19 @@ class QuestionEvent(_Model):
     text: str = Field(min_length=1)
 
 
-class BackEvent(_Model):
-    """The student pressed "back" to leave the lecture for the outline page.
-
-    Their place is saved. segment_index is the position in the speech that was
-    playing, so an explanation resumes from exactly that segment.
-    """
-
-    type: Literal["back"] = "back"
-    segment_index: int = Field(default=0, ge=0)
-
-
 class RepeatEvent(_Model):
-    """From the outline: explain a topic again, in a different way."""
+    """Repeat button on a topic in the outline: explain it again, in a different way."""
 
     type: Literal["repeat"] = "repeat"
     topic_index: int = Field(ge=0)
 
 
 class GoToTopicEvent(_Model):
-    """From the outline: go to a topic (resumes it if it's the one in progress)."""
+    """The student clicked a topic's name in the outline.
+
+    A topic left halfway resumes where they left it; a finished topic (or the
+    one they're in) is explained again the same way; a new one is taught.
+    """
 
     type: Literal["go_to_topic"] = "go_to_topic"
     topic_index: int = Field(ge=0)
@@ -108,22 +101,14 @@ class ContinueEvent(_Model):
     type: Literal["continue"] = "continue"
 
 
-class EndEvent(_Model):
-    """End the session now, with the goodbye summary (optional; it also ends after the last topic)."""
-
-    type: Literal["end"] = "end"
-
-
 StudentEvent = Annotated[
     Union[
         AnswerEvent,
         RaiseHandEvent,
         QuestionEvent,
-        BackEvent,
         RepeatEvent,
         GoToTopicEvent,
         ContinueEvent,
-        EndEvent,
     ],
     Field(discriminator="type"),
 ]
@@ -147,11 +132,10 @@ class AvatarState(str, Enum):
 class Awaiting(str, Enum):
     """What the frontend should let the student do next."""
 
-    NOTHING = "nothing"  # session is over, no input expected
+    NOTHING = "nothing"  # lecture finished (after the goodbye), no input expected
     ANSWER = "answer"  # show the answer box
     QUESTION = "question"  # hand is raised, show the question box
     CONTINUE = "continue"  # after the speech plays, automatically send a "continue" event
-    OUTLINE = "outline"  # lecture paused: show the outline page
 
 
 class Topic(_Model):
