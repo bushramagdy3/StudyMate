@@ -10,6 +10,8 @@ export function ChooseEnvironmentPage({
   onBack,
   onContinue,
 }) {
+  const canContinue = Boolean(selectedEnvironmentId)
+
   return (
     <Screen background={background} className="choose-page">
       <h1 className="page-title choose-title">Choose Your Environment</h1>
@@ -32,7 +34,12 @@ export function ChooseEnvironmentPage({
         <button className="asset-button back-flow-button" type="button" onClick={onBack}>
           <img src={backButton} alt="Back" />
         </button>
-        <button className="asset-button continue-flow-button" type="button" onClick={onContinue}>
+        <button
+          className="asset-button continue-flow-button"
+          disabled={!canContinue}
+          type="button"
+          onClick={onContinue}
+        >
           <img src={continueButton} alt="Continue" />
         </button>
       </div>

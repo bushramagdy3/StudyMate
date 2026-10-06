@@ -4,14 +4,27 @@ import { Header } from './components/Header.jsx'
 import { environments } from './data/environments.js'
 import { ChooseEnvironmentPage } from './pages/ChooseEnvironmentPage.jsx'
 import { HomePage } from './pages/HomePage.jsx'
+import { SessionPage } from './pages/SessionPage.jsx'
 import { UploadPdfPage } from './pages/UploadPdfPage.jsx'
 
-const pages = new Set(['home', 'upload', 'choose'])
+const pages = new Set(['home', 'upload', 'choose', 'session'])
+
+function environmentExists(environmentId) {
+  return environments.some((environment) => environment.id === environmentId)
+}
 
 function getInitialPage() {
-  const hashPage = window.location.hash.replace('#', '')
+  const [hashPage] = window.location.hash.replace('#', '').split('/')
 
   return pages.has(hashPage) ? hashPage : 'home'
+}
+
+function getInitialEnvironmentId() {
+  const [, hashEnvironmentId] = window.location.hash.replace('#', '').split('/')
+  const queryEnvironmentId = new URLSearchParams(window.location.search).get('env')
+  const environmentId = hashEnvironmentId || queryEnvironmentId
+
+  return environmentExists(environmentId) ? environmentId : ''
 }
 
 function App() {
@@ -19,16 +32,31 @@ function App() {
   const [pdfName, setPdfName] = useState(
     () => new URLSearchParams(window.location.search).get('file') || '',
   )
-  const [environmentId, setEnvironmentId] = useState('lecture-hall')
+  const [environmentId, setEnvironmentId] = useState(getInitialEnvironmentId)
 
-  function goToPage(nextPage) {
-    window.history.replaceState(null, '', `#${nextPage}`)
+  const selectedEnvironment =
+    environments.find((environment) => environment.id === environmentId) ||
+    environments[0]
+
+  function goToPage(nextPage, nextEnvironmentId = environmentId) {
+    if (nextPage === 'session' && !environmentExists(nextEnvironmentId)) {
+      return
+    }
+
+    const nextHash =
+      nextPage === 'session' ? `#session/${nextEnvironmentId}` : `#${nextPage}`
+
+    window.history.replaceState(null, '', nextHash)
     setPage(nextPage)
   }
 
   return (
     <>
-      <Header onHome={() => goToPage('home')} />
+      <Header
+        isSession={page === 'session'}
+        onEndSession={() => goToPage('home')}
+        onHome={() => goToPage('home')}
+      />
 
       {page === 'home' && (
         <HomePage
@@ -51,8 +79,12 @@ function App() {
           selectedEnvironmentId={environmentId}
           onSelectEnvironment={setEnvironmentId}
           onBack={() => goToPage('upload')}
-          onContinue={() => {}}
+          onContinue={() => goToPage('session', environmentId)}
         />
+      )}
+
+      {page === 'session' && (
+        <SessionPage environment={selectedEnvironment} />
       )}
     </>
   )
