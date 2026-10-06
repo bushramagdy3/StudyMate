@@ -27,9 +27,11 @@ MAX_ATTEMPTS = 2
 class Mode(str, Enum):
     """What the agent is waiting for while it is paused."""
 
-    EXPLAINING = "explaining"  # speech is playing; waiting for continue / raise_hand / navigation
+    EXPLAINING = "explaining"  # an explanation part is playing; continue -> ask a question
+    FEEDBACK = "feedback"  # praise or the revealed answer is playing; continue -> lecture goes on
     AWAITING_ANSWER = "awaiting_answer"  # asked a question; waiting for the student's answer
     AWAITING_STUDENT_QUESTION = "awaiting_student_question"  # hand raised; waiting for their question
+    ANSWERING_STUDENT = "answering_student"  # answer to their question is playing; continue -> back to the explanation
     ENDED = "ended"
 
 
@@ -137,6 +139,8 @@ def feedback_kind(correct: bool, attempts: int) -> FeedbackKind:
 # How each mode looks to the frontend: (avatar_state, awaiting).
 _MODE_TO_UI = {
     Mode.EXPLAINING: (AvatarState.SPEAKING, Awaiting.CONTINUE),
+    Mode.FEEDBACK: (AvatarState.SPEAKING, Awaiting.CONTINUE),
+    Mode.ANSWERING_STUDENT: (AvatarState.SPEAKING, Awaiting.CONTINUE),
     Mode.AWAITING_ANSWER: (AvatarState.ASKING_QUESTION, Awaiting.ANSWER),
     Mode.AWAITING_STUDENT_QUESTION: (AvatarState.LISTENING, Awaiting.QUESTION),
     Mode.ENDED: (AvatarState.IDLE, Awaiting.NOTHING),
@@ -157,6 +161,7 @@ def to_response(state: TeacherState) -> TeacherResponse:
         ],
         current_topic=state["current_topic"],
         completed_topics=state["completed_topics"],
+        can_raise_hand=state["mode"] == Mode.EXPLAINING,
     )
 
 # Our own types that are stored in the state. LangGraph only reloads saved
