@@ -395,12 +395,6 @@ async def upload_pdf(
         pages
     )
 
-    ## invoke lecture chunks into the agent's workflow and return current speach
-
-    lecture_chunks = await pages_to_lecture_chunks(
-        pages
-    )
-
     return PdfUploadResponse(
         lecture_chunks=lecture_chunks
     )
