@@ -206,6 +206,7 @@ def make_plan_node(llm: LLM):
             "current_topic": 0,
             "segments": [],
             "segment_index": 0,
+            "question_points": [],
             "completed_topics": [],
             "mode": Mode.EXPLAINING,
         }
