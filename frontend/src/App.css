@@ -651,7 +651,6 @@ button {
 }
 
 .session-avatar {
-  animation: avatar-idle 3.4s ease-in-out infinite;
   display: block;
   height: auto;
   image-rendering: pixelated;
