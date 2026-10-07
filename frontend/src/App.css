@@ -658,6 +658,32 @@ button {
   z-index: 3;
 }
 
+.session-subtitles {
+  /* Same panel look as the outline and message bar. */
+  animation: panel-pop 220ms steps(5, end) both;
+  background: rgba(28, 19, 17, 0.9);
+  border: clamp(3px, 0.24vw, 4px) solid #f0aa78;
+  bottom: 4%;
+  box-shadow:
+    0 0 0 clamp(2px, 0.18vw, 3px) #110c0b,
+    inset 0 0 12px rgba(0, 0, 0, 0.35);
+  color: var(--cream);
+  font-family: var(--pixel-font);
+  font-size: clamp(14px, 1.35vw, 22px);
+  left: 0;
+  line-height: 1.35;
+  margin: 0 auto;
+  max-width: 86%;
+  padding: 0.6em 1em;
+  pointer-events: none;
+  position: absolute;
+  right: 0;
+  text-align: center;
+  text-shadow: 2px 2px 0 #000;
+  width: fit-content;
+  z-index: 5;
+}
+
 .pdf-slide-slot {
   align-items: center;
   background: #fdfaf4;
