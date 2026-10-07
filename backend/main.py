@@ -5,8 +5,16 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import httpx
-from agent.contract import LectureChunk
-from fastapi import FastAPI, File, HTTPException, UploadFile, Response
+from agent.contract import (
+    Environment,
+    LectureChunk,
+    StartSessionRequest,
+    StudentEvent,
+    TeacherResponse,
+)
+from agent.llm import LLMError
+from agent.teacher import EventNotAllowed, SessionNotFound, Teacher
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile, Response
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 from pydantic import BaseModel
@@ -15,7 +23,10 @@ load_dotenv(Path(__file__).parent / ".env")
 
 app = FastAPI()
 
-origins = ["http://localhost:5173"]
+origins = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+]
 
 app.add_middleware(
     CORSMiddleware,
@@ -44,6 +55,56 @@ class PdfUploadResponse(BaseModel):
 
 class TTR(BaseModel):
     text: str
+
+
+teacher: Teacher | None = None
+
+
+def get_teacher() -> Teacher:
+    global teacher
+
+    if teacher is None:
+        try:
+            teacher = Teacher()
+        except LLMError as error:
+            raise HTTPException(
+                status_code=500,
+                detail=str(error),
+            )
+
+    return teacher
+
+
+def session_not_found(session_id: str) -> HTTPException:
+    return HTTPException(
+        status_code=404,
+        detail=f"Session '{session_id}' was not found.",
+    )
+
+
+def parse_environment(value: str | None) -> Environment:
+    aliases = {
+        "lecture-hall": Environment.LECTURE_HALL,
+        "private-tutor": Environment.STUDY_ROOM,
+        "study-cafe": Environment.CAFE,
+    }
+
+    if value is None:
+        raise HTTPException(
+            status_code=422,
+            detail="environment is required.",
+        )
+
+    if value in aliases:
+        return aliases[value]
+
+    try:
+        return Environment(value)
+    except ValueError:
+        raise HTTPException(
+            status_code=422,
+            detail="environment must be lecture_hall, study_room or cafe.",
+        )
 
 
 @dataclass
@@ -264,6 +325,38 @@ async def pages_to_lecture_chunks(
     ]
 
 
+async def process_pdf_upload(pdf: UploadFile) -> list[LectureChunk]:
+    if pdf.content_type != "application/pdf":
+        raise HTTPException(
+            status_code=400,
+            detail="Upload a PDF file.",
+        )
+
+    pdf_bytes = await pdf.read()
+
+    if len(pdf_bytes) == 0:
+        raise HTTPException(
+            status_code=400,
+            detail="PDF file is empty.",
+        )
+
+    try:
+        # Rendering pages is slow CPU work; a thread keeps the server responsive.
+        pages = await asyncio.to_thread(
+            read_pages,
+            pdf_bytes,
+        )
+    except Exception:
+        raise HTTPException(
+            status_code=400,
+            detail="Could not read PDF file.",
+        )
+
+    return await pages_to_lecture_chunks(
+        pages
+    )
+
+
 # ---------------------------------------------------------
 # TEXT-TO-SPEECH
 # ---------------------------------------------------------
@@ -361,39 +454,65 @@ def main():
 async def upload_pdf(
     pdf: UploadFile = File(...)
 ):
-    if pdf.content_type != "application/pdf":
-        raise HTTPException(
-            status_code=400,
-            detail="Upload a PDF file.",
-        )
+    return PdfUploadResponse(
+        lecture_chunks=await process_pdf_upload(pdf)
+    )
 
-    pdf_bytes = await pdf.read()
 
-    if len(pdf_bytes) == 0:
-        raise HTTPException(
-            status_code=400,
-            detail="PDF file is empty.",
-        )
+@app.post("/api/sessions", response_model=TeacherResponse)
+async def start_session(
+    pdf: UploadFile = File(...),
+    environment: str | None = Form(None),
+    enviroment: str | None = Form(None),
+):
+    request = StartSessionRequest(
+        environment=parse_environment(environment or enviroment),
+        lecture=await process_pdf_upload(pdf),
+    )
 
     try:
-        # Rendering pages is slow CPU work; a thread keeps the server responsive.
-        pages = await asyncio.to_thread(
-            read_pages,
-            pdf_bytes,
-        )
-    except Exception:
+        return get_teacher().start_session(request)
+    except LLMError as error:
         raise HTTPException(
-            status_code=400,
-            detail="Could not read PDF file.",
+            status_code=502,
+            detail=str(error),
         )
 
-    lecture_chunks = await pages_to_lecture_chunks(
-        pages
-    )
 
-    return PdfUploadResponse(
-        lecture_chunks=lecture_chunks
-    )
+@app.post("/api/sessions/{session_id}/events", response_model=TeacherResponse)
+def send_session_event(session_id: str, event: StudentEvent):
+    try:
+        return get_teacher().send_event(session_id, event)
+    except SessionNotFound:
+        raise session_not_found(session_id)
+    except EventNotAllowed as error:
+        raise HTTPException(
+            status_code=409,
+            detail=str(error),
+        )
+    except LLMError as error:
+        raise HTTPException(
+            status_code=502,
+            detail=str(error),
+        )
+
+
+@app.get("/api/sessions/{session_id}", response_model=TeacherResponse)
+def get_session(session_id: str):
+    try:
+        return get_teacher().get_session(session_id)
+    except SessionNotFound:
+        raise session_not_found(session_id)
+
+
+@app.delete("/api/sessions/{session_id}", status_code=204)
+def delete_session(session_id: str):
+    try:
+        get_teacher().end_session(session_id)
+    except SessionNotFound:
+        raise session_not_found(session_id)
+
+    return Response(status_code=204)
 
 
 @app.post("/api/tutor-speech")

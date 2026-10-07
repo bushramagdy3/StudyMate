@@ -7,6 +7,7 @@ from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 import main
+from agent.contract import Awaiting, AvatarState, Environment, LectureChunk, TeacherResponse, Topic
 from main import Page, app, pages_to_lecture_chunks, read_pages
 
 LONG_TEXT = "HTTP/1.1 pipelining lets a client send several requests without waiting."
@@ -140,3 +141,41 @@ def test_upload_endpoint_rejects_non_pdf():
     client = TestClient(app)
     response = client.post("/api/upload-pdf", files={"pdf": ("notes.txt", b"hi", "text/plain")})
     assert response.status_code == 400
+
+
+def test_start_session_endpoint_processes_pdf_before_starting_agent(monkeypatch):
+    captured = {}
+
+    async def fake_process_pdf(pdf):
+        captured["filename"] = pdf.filename
+        return [LectureChunk(slide=1, text="HTTP overview")]
+
+    class FakeTeacher:
+        def start_session(self, request):
+            captured["request"] = request
+            return TeacherResponse(
+                session_id="session-1",
+                speech=["Welcome."],
+                avatar_state=AvatarState.SPEAKING,
+                awaiting=Awaiting.CONTINUE,
+                outline=[Topic(index=0, title="HTTP")],
+                current_topic=0,
+                current_slide=1,
+                can_raise_hand=True,
+            )
+
+    monkeypatch.setattr(main, "process_pdf_upload", fake_process_pdf)
+    monkeypatch.setattr(main, "get_teacher", lambda: FakeTeacher())
+
+    client = TestClient(app)
+    response = client.post(
+        "/api/sessions",
+        data={"environment": "private-tutor"},
+        files={"pdf": ("lecture.pdf", b"%PDF", "application/pdf")},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["session_id"] == "session-1"
+    assert captured["filename"] == "lecture.pdf"
+    assert captured["request"].environment is Environment.STUDY_ROOM
+    assert captured["request"].lecture == [LectureChunk(slide=1, text="HTTP overview")]
