@@ -1289,6 +1289,43 @@ button {
   color: var(--cream);
 }
 
+.music-toggle {
+  align-items: center;
+  background: linear-gradient(180deg, #4a302a, #30201c);
+  border: 3px solid #d08b62;
+  box-shadow: 0 0 0 2px #120d0b, inset 0 0 0 2px rgba(255, 205, 156, 0.12);
+  color: var(--cream);
+  cursor: pointer;
+  display: flex;
+  font-family: var(--pixel-font);
+  font-size: clamp(20px, 1.7vw, 27px);
+  height: clamp(42px, 3.7vw, 56px);
+  justify-content: center;
+  line-height: 1;
+  padding: 0;
+  position: fixed;
+  right: clamp(14px, 2vw, 28px);
+  bottom: clamp(14px, 2vw, 28px);
+  transition: filter 120ms ease, transform 120ms ease;
+  width: clamp(42px, 3.7vw, 56px);
+  z-index: 1100;
+}
+
+.music-toggle:hover {
+  filter: brightness(1.12);
+  transform: translateY(-1px);
+}
+
+.music-toggle-icon {
+  height: 24px;
+  image-rendering: pixelated;
+  width: 24px;
+}
+
+.music-toggle:active {
+  transform: translateY(2px) scale(0.98);
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

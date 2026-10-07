@@ -5,6 +5,7 @@ import { AboutPopup } from './components/AboutPopup.jsx'
 import { Header } from './components/Header.jsx'
 import { LoadingPopup } from './components/LoadingPopup.jsx'
 import { WarningPopup } from './components/WarningPopup.jsx'
+import { BackgroundMusic } from './components/BackgroundMusic.jsx'
 import {
   abortAllSessionRequests,
   deleteSession,
@@ -227,6 +228,7 @@ function App() {
 
   return (
     <>
+      <BackgroundMusic track={displayedPage === 'session' ? environmentId : 'home'} />
       <Header
         completedTopics={teacherResponse?.completed_topics.length || 0}
         isSession={displayedPage === 'session'}
