@@ -1,4 +1,4 @@
-"""Step 7: Regina explains the current topic, in short spoken segments.
+"""Step 7: Regina explains the current topic, in sentence-sized spoken segments.
 
 A topic's explanation is written once, as `segments_per_topic` segments, and
 delivered in parts: each part ends where the teacher asks a question. The LLM
@@ -12,6 +12,8 @@ segment. The frontend reports positions inside the part it received, so:
 - raise_hand(segment_index=i)  -> resume from state["segment_index"] + i
 - continue                     -> move on to next_stop(...)
 """
+
+import re
 
 from pydantic import BaseModel, Field
 
@@ -124,7 +126,8 @@ def explain_prompt(state: TeacherState, previous: list[str] | None = None) -> st
     lines += [
         "",
         f"Write the explanation as exactly {count} segments, in teaching order.",
-        "Each segment is 2 to 4 spoken sentences about one small idea.",
+        "Each segment is 2 to 4 short spoken sentences about one small idea.",
+        "Use complete, concise sentences; each sentence becomes its own playback and resume chunk.",
         "Teach clearly: define new terms before using them, then explain the idea step by step.",
         "When a slide contains a diagram, table, equation, chart, or visual example, explicitly explain what it shows and how it supports the concept.",
         "If the slide has labels, axes, arrows, rows, columns, formulas, or examples, refer to their meaning rather than vaguely saying 'the visual'.",
@@ -154,16 +157,27 @@ def generate_segments(
             Explanation,
             temperature=0.7,
         )
-        segments = fit_segments(explanation.segments, personality.segments_per_topic)
+        grouped_segments = fit_segments(explanation.segments, personality.segments_per_topic)
+        segments, group_ends = split_into_sentence_segments(grouped_segments)
         if segments:
+            mapped_points = [
+                group_ends[point - 1]
+                for point in explanation.question_after
+                if 1 <= point <= len(group_ends)
+            ]
             points = choose_question_points(
-                explanation.question_after, len(segments), personality.questions_per_topic
+                mapped_points, len(segments), personality.questions_per_topic
             )
             return segments, points
     except LLMError:
         pass
-    segments = fallback_segments(topic)
-    return segments, default_question_points(len(segments), personality.questions_per_topic)
+    grouped_segments = fallback_segments(topic)
+    segments, group_ends = split_into_sentence_segments(grouped_segments)
+    grouped_points = default_question_points(
+        len(grouped_segments), personality.questions_per_topic
+    )
+    points = [group_ends[point - 1] for point in grouped_points]
+    return segments, points
 
 
 def fit_segments(segments: list[str], count: int) -> list[str]:
@@ -172,6 +186,27 @@ def fit_segments(segments: list[str], count: int) -> list[str]:
     if len(segments) > count:
         segments = segments[: count - 1] + [" ".join(segments[count - 1 :])]
     return segments
+
+
+def split_into_sentence_segments(segments: list[str]) -> tuple[list[str], list[int]]:
+    """Flatten explanation groups into sentence-sized playback chunks.
+
+    The returned group-end positions let question points from the LLM stay at
+    the end of the same idea after a multi-sentence group is split.
+    """
+    sentences = []
+    group_ends = []
+
+    for segment in segments:
+        parts = [
+            part.strip()
+            for part in re.split(r"(?<=[.!?])\s+(?=[A-Z0-9\"'])", segment.strip())
+            if part.strip()
+        ]
+        sentences.extend(parts or [segment.strip()])
+        group_ends.append(len(sentences))
+
+    return sentences, group_ends
 
 
 def fallback_segments(topic: OutlineTopic) -> list[str]:

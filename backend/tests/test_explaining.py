@@ -146,8 +146,12 @@ def test_repeat_asks_for_a_different_explanation():
 def test_llm_failure_uses_fallback_segments():
     llm, _ = fake_llm(status=503)
     segments, points = generate_segments(llm, make_state())
-    assert segments == fallback_segments(OUTLINE[0])
-    assert points == [1, 2]  # default points for 2 segments, 2 questions
+    assert segments == [
+        "Let's look at Pipelining.",
+        "Sending requests without waiting.",
+        "several requests at once.",
+    ]
+    assert points == [2, 3]  # questions stay at the ends of the original idea groups
     assert fallback_segments(OUTLINE[0]) == [
         "Let's look at Pipelining. Sending requests without waiting.",
         "several requests at once.",

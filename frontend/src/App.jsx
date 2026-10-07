@@ -1,14 +1,20 @@
 import { useEffect, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 import './App.css'
 import { AboutPopup } from './components/AboutPopup.jsx'
 import { Header } from './components/Header.jsx'
 import { LoadingPopup } from './components/LoadingPopup.jsx'
-import { deleteSession, startSession } from './api/studyMateApi.js'
+import {
+  abortAllSessionRequests,
+  deleteSession,
+  startSession,
+} from './api/studyMateApi.js'
 import { environments } from './data/environments.js'
 import { ChooseEnvironmentPage } from './pages/ChooseEnvironmentPage.jsx'
 import { HomePage } from './pages/HomePage.jsx'
 import { SessionPage } from './pages/SessionPage.jsx'
 import { UploadPdfPage } from './pages/UploadPdfPage.jsx'
+import { stopSpeech } from './utils/speechAudio.js'
 
 const pages = new Set(['home', 'upload', 'choose', 'session'])
 
@@ -48,6 +54,7 @@ function App() {
   const selectedEnvironment =
     environments.find((environment) => environment.id === environmentId) ||
     environments[0]
+  const displayedPage = page === 'session' && !teacherResponse ? 'home' : page
 
   useEffect(() => {
     return () => {
@@ -142,42 +149,47 @@ function App() {
     }
   }
 
-  async function endSession() {
+  function endSession() {
     const sessionId = teacherResponse?.session_id
 
+    // Commit the home screen before media/request cleanup can run any callbacks.
+    window.history.replaceState(null, '', '#home')
+    flushSync(() => {
+      setPage('home')
+      setTeacherResponse(null)
+      setIsLoadingSession(false)
+      setIsAboutOpen(false)
+    })
+
+    stopSpeech()
+    abortAllSessionRequests()
     abortStartSession()
-    setTeacherResponse(null)
-    setIsLoadingSession(false)
-    goToPage('home')
 
     if (!sessionId) {
       return
     }
 
-    try {
-      await deleteSession(sessionId)
-    } catch (error) {
-      console.error(error)
-    }
+    // Session deletion is cleanup only. It must not hold the UI on a blank page.
+    deleteSession(sessionId).catch((error) => console.error(error))
   }
 
   return (
     <>
       <Header
-        isSession={page === 'session'}
+        isSession={displayedPage === 'session'}
         onAbout={() => setIsAboutOpen(true)}
         onEndSession={endSession}
-        onHome={() => goToPage('home')}
+        onHome={displayedPage === 'session' ? endSession : () => goToPage('home')}
       />
 
-      {page === 'home' && (
+      {displayedPage === 'home' && (
         <HomePage
           onAbout={() => setIsAboutOpen(true)}
           onStart={() => goToPage('upload')}
         />
       )}
 
-      {page === 'upload' && (
+      {displayedPage === 'upload' && (
         <UploadPdfPage
           onPdfFileChange={changePdfFile}
           pdfName={pdfName}
@@ -187,7 +199,7 @@ function App() {
         />
       )}
 
-      {page === 'choose' && (
+      {displayedPage === 'choose' && (
         <ChooseEnvironmentPage
           environments={environments}
           selectedEnvironmentId={environmentId}
@@ -198,7 +210,7 @@ function App() {
         />
       )}
 
-      {page === 'session' && teacherResponse && (
+      {displayedPage === 'session' && teacherResponse && (
         <SessionPage
           environment={selectedEnvironment}
           initialTeacherResponse={teacherResponse}

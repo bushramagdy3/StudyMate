@@ -22,9 +22,9 @@ RECENT_HISTORY = 6
 
 # What Regina says when she sees a raised hand. Fixed lines, so there's no LLM wait.
 HAND_RAISE_REPLIES = {
-    "professor": "Yes, a question? Go ahead.",
-    "tutor": "Of course! What's your question?",
-    "study friend": "Yeah? What's up?",
+    "professor": "Yes, go ahead. What question would you like to raise?",
+    "tutor": "Of course. What are you wondering about?",
+    "study friend": "Yeah, tell me what part feels confusing.",
 }
 
 

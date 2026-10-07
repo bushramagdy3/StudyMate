@@ -1218,7 +1218,6 @@ button {
   align-items: center;
   background: rgba(28, 19, 17, 0.94);
   border: clamp(2px, 0.16vw, 3px) solid #d99669;
-  bottom: 3.2%;
   box-shadow:
     0 0 0 2px rgba(17, 12, 11, 0.88),
     0 5px 16px rgba(0, 0, 0, 0.3);
@@ -1232,6 +1231,7 @@ button {
   max-width: 58%;
   padding: 0.7% 1.15%;
   position: absolute;
+  top: 3.2%;
   text-shadow: 2px 2px 0 #000;
   transform: translateX(-50%);
   z-index: 8;

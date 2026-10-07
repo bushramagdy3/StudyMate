@@ -38,11 +38,13 @@ export function SessionPage({
   const [requestError, setRequestError] = useState('')
   const [pendingAction, setPendingAction] = useState(null)
   const [subtitle, setSubtitle] = useState('')
+  const [isAudioPending, setIsAudioPending] = useState(false)
   const playingSegment = useRef(0)
   const actionToken = useRef(0)
   const eventRequests = useRef(new Set())
+  const isBusy = isPending || isAudioPending
 
-  const avatarPosture = isPending
+  const avatarPosture = isBusy
     ? 'thinking'
     : teacherResponse.avatar_state || 'idle'
 
@@ -59,7 +61,8 @@ export function SessionPage({
     teacherResponse.current_topic === null &&
     teacherResponse.awaiting === 'continue'
   const stageStatus =
-    pendingAction?.label || statusForCurrentPhase(teacherResponse.phase)
+    pendingAction?.label ||
+    (isAudioPending ? 'Preparing Regina’s response…' : statusForCurrentPhase(teacherResponse.phase))
 
   useEffect(() => {
     const requests = eventRequests.current
@@ -85,6 +88,8 @@ export function SessionPage({
     // Never leave old audio or an older request running while the student
     // starts a new action. Otherwise two responses can race and corrupt the UI.
     stopSpeech()
+    setSubtitle('')
+    setIsAudioPending(false)
     eventRequests.current.forEach((request) => request.abort())
     eventRequests.current.clear()
 
@@ -98,7 +103,13 @@ export function SessionPage({
     })
 
     if (options.playThinking) {
-      playThinkingSpeech(environment.id).catch(logSpeechError)
+      playThinkingSpeech(environment.id, {
+        onSegment: (_index, text) => {
+          if (token === actionToken.current) {
+            setSubtitle(text)
+          }
+        },
+      }).catch(logSpeechError)
     }
 
     try {
@@ -133,11 +144,31 @@ export function SessionPage({
   useEffect(() => {
     const token = actionToken.current
 
-    playSpeech(teacherResponse.speech, environment.id, (index, text) => {
-      playingSegment.current = index
-      setSubtitle(text)
+    playSpeech(teacherResponse.speech, environment.id, {
+      onWaiting: () => {
+        if (token === actionToken.current) {
+          setIsAudioPending(true)
+          setSubtitle('')
+        }
+      },
+      onStart: () => {
+        if (token === actionToken.current) {
+          setIsAudioPending(false)
+        }
+      },
+      onSegment: (index, text) => {
+        if (token === actionToken.current) {
+          playingSegment.current = index
+          setSubtitle(text)
+        }
+      },
     })
       .then(() => {
+        if (token === actionToken.current) {
+          setSubtitle('')
+          setIsAudioPending(false)
+        }
+
         if (
           token === actionToken.current &&
           teacherResponse.awaiting === 'continue'
@@ -158,11 +189,13 @@ export function SessionPage({
     environment.id,
     sendEvent,
     teacherResponse.awaiting,
+    teacherResponse.current_topic,
+    teacherResponse.phase,
     teacherResponse.speech,
   ])
 
   function chooseTopic(topicIndex) {
-    if (isPending) {
+    if (isBusy) {
       return
     }
 
@@ -183,7 +216,7 @@ export function SessionPage({
   }
 
   function raiseHand() {
-    if (isPending) {
+    if (isBusy) {
       return
     }
 
@@ -197,7 +230,7 @@ export function SessionPage({
   }
 
   function sendMessage(text) {
-    if (isPending) {
+    if (isBusy) {
       return
     }
 
@@ -260,16 +293,16 @@ export function SessionPage({
 
         {stageStatus && (
           <div
-            className={isPending ? 'session-flow-status thinking' : 'session-flow-status'}
+            className={isBusy ? 'session-flow-status thinking' : 'session-flow-status'}
             role="status"
             aria-live="polite"
           >
-            {isPending && <span className="session-flow-spinner" aria-hidden="true" />}
+            {isBusy && <span className="session-flow-spinner" aria-hidden="true" />}
             <span>{stageStatus}</span>
           </div>
         )}
 
-        {subtitle && !isPending && (
+        {subtitle && (
           // key: each new subtitle is a new element, so it pops in like the panels.
           <p key={subtitle} className="session-subtitles">
             {subtitle}
@@ -280,7 +313,7 @@ export function SessionPage({
       <SessionOutline
         completedTopics={teacherResponse.completed_topics}
         currentTopic={teacherResponse.current_topic}
-        disabled={isPending || introIsPlaying}
+        disabled={isBusy || introIsPlaying}
         onSelectTopic={chooseTopic}
         outline={teacherResponse.outline}
         pendingTopic={pendingAction?.topicIndex ?? null}
@@ -289,7 +322,7 @@ export function SessionPage({
       <MessageBar
         awaiting={teacherResponse.awaiting}
         canRaiseHand={teacherResponse.can_raise_hand}
-        disabled={isPending}
+        disabled={isBusy}
         onRaiseHand={raiseHand}
         onSendMessage={sendMessage}
       />

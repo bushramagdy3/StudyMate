@@ -14,8 +14,9 @@ const speechRequests = new Set()
 // Goes up every time speech is stopped, so an older playSpeech() knows to give up.
 let speechSequence = 0
 
-// Subtitles show at most this many sentences, and roughly this many characters, at once.
-const SUBTITLE_MAX_SENTENCES = 2
+// Dynamic speech is played one sentence at a time so each subtitle has exact
+// audio start/end boundaries.
+const SUBTITLE_MAX_SENTENCES = 1
 const SUBTITLE_MAX_CHARS = 120
 
 /**
@@ -54,69 +55,52 @@ export function splitIntoSubtitles(text) {
  * playing (onPlaying); then showChunk(chunkText) is called as the audio
  * progresses, each chunk shown for its share of the clip by length.
  */
-function followAudioWithSubtitles(text, showChunk) {
-  const chunks = splitIntoSubtitles(text)
-  const totalLength = chunks.reduce((sum, chunk) => sum + chunk.length, 0)
-  const ends = []
-  let lengthSoFar = 0
-
-  for (const chunk of chunks) {
-    lengthSoFar += chunk.length
-    ends.push(lengthSoFar / totalLength)
-  }
-
-  let shown = -1
-  const show = (index) => {
-    if (index !== shown) {
-      shown = index
-      showChunk(chunks[index])
-    }
-  }
-
-  let playing = false
-
+function followAudioWithSubtitles(text, showChunk, clearSubtitle) {
   return {
     onPlaying() {
-      playing = true
-
-      if (shown === -1) {
-        show(0)
-      }
+      showChunk(text)
     },
-    onProgress(fraction) {
-      if (!playing) {
-        return
-      }
-
-      const index = ends.findIndex((end) => fraction < end)
-      show(index === -1 ? chunks.length - 1 : index)
+    onEnd() {
+      clearSubtitle()
     },
   }
 }
 
 function stopAudio() {
-  if (currentAudio) {
-    currentAudio.pause()
-    currentAudio.removeAttribute('src')
-    currentAudio.load()
-    currentAudio = null
+  const audio = currentAudio
+  const finish = finishCurrentAudio
+  currentAudio = null
+  finishCurrentAudio = null
+
+  if (audio) {
+    try {
+      audio.pause()
+      audio.removeAttribute('src')
+      audio.load()
+    } catch (error) {
+      console.warn('Could not fully release the previous audio element.', error)
+    }
   }
 
-  if (finishCurrentAudio) {
-    const finish = finishCurrentAudio
-    finishCurrentAudio = null
+  if (finish) {
     finish()
   }
 }
 
 export function stopSpeech() {
   speechSequence += 1
-  speechRequests.forEach((controller) => controller.abort())
+  speechRequests.forEach((controller) => {
+    try {
+      controller.abort()
+    } catch (error) {
+      console.warn('Could not abort a speech request.', error)
+    }
+  })
   speechRequests.clear()
   stopAudio()
 }
 
-function playAudioUrl(audioUrl, shouldRevoke = false, subtitles = null) {
+function playAudioUrl(audioUrl, shouldRevoke = false, subtitles = null, callbacks = {}) {
   stopAudio()
 
   return new Promise((resolve, reject) => {
@@ -126,15 +110,15 @@ function playAudioUrl(audioUrl, shouldRevoke = false, subtitles = null) {
     if (subtitles) {
       // "playing" fires when sound actually starts (after loading and decoding),
       // so the subtitle never appears before Regina starts speaking.
-      audio.onplaying = () => subtitles.onPlaying()
-      audio.ontimeupdate = () => {
-        if (Number.isFinite(audio.duration) && audio.duration > 0) {
-          subtitles.onProgress(audio.currentTime / audio.duration)
-        }
+      audio.onplaying = () => {
+        callbacks.onStart?.()
+        subtitles.onPlaying()
       }
     }
 
     const cleanUp = () => {
+      subtitles?.onEnd()
+
       if (shouldRevoke) {
         URL.revokeObjectURL(audioUrl)
       }
@@ -145,10 +129,10 @@ function playAudioUrl(audioUrl, shouldRevoke = false, subtitles = null) {
       }
     }
 
-    // stopSpeech() ends this clip early: settle the promise instead of leaving it hanging.
+    // Reject as an abort so a stopped clip can never advance the lecture flow.
     finishCurrentAudio = () => {
       cleanUp()
-      resolve()
+      reject(new DOMException('Speech stopped', 'AbortError'))
     }
 
     audio.onended = () => {
@@ -161,7 +145,10 @@ function playAudioUrl(audioUrl, shouldRevoke = false, subtitles = null) {
       reject(new Error(`Could not play audio: ${audioUrl}`))
     }
 
-    audio.play().catch(reject)
+    audio.play().catch((error) => {
+      cleanUp()
+      reject(error)
+    })
   })
 }
 
@@ -204,33 +191,57 @@ function prefetchSpeechAudio(text) {
  * of it being said right now. It's first called with (0, '') to hide the old
  * subtitle while the new audio loads.
  */
-export async function playSpeech(speech, environmentId, onSegment = () => {}) {
+export async function playSpeech(speech, environmentId, callbacks = {}) {
   stopSpeech()
   const sequence = speechSequence
-  const segments = (Array.isArray(speech) ? speech : [speech]).filter(Boolean)
+  const sourceSegments = (Array.isArray(speech) ? speech : [speech]).filter(Boolean)
+  const onSegment = typeof callbacks === 'function'
+    ? callbacks
+    : callbacks.onSegment || (() => {})
+  const onWaiting = typeof callbacks === 'function'
+    ? () => {}
+    : callbacks.onWaiting || (() => {})
+  const onStart = typeof callbacks === 'function'
+    ? () => {}
+    : callbacks.onStart || (() => {})
 
   // Hide the previous subtitle until this speech's audio starts playing.
   onSegment(0, '')
 
-  if (segments.length === 0) {
+  if (sourceSegments.length === 0) {
     return
   }
 
   // Pre-recorded audio for the whole speech (fixed lines): one subtitle for all of it.
-  const fullText = segments.join(' ')
+  const fullText = sourceSegments.join(' ')
   const pregenerated = getPregeneratedSpeechByText(environmentId, fullText)
 
   if (pregenerated) {
-    const subtitles = followAudioWithSubtitles(fullText, (subtitle) => onSegment(0, subtitle))
-    await playAudioUrl(getPregeneratedSpeechUrl(environmentId, pregenerated), false, subtitles)
+    onWaiting()
+    const subtitles = followAudioWithSubtitles(
+      fullText,
+      (subtitle) => onSegment(0, subtitle),
+      () => onSegment(0, ''),
+    )
+    await playAudioUrl(
+      getPregeneratedSpeechUrl(environmentId, pregenerated),
+      false,
+      subtitles,
+      { onStart },
+    )
     return
   }
 
+  const segments = sourceSegments.flatMap((text, sourceIndex) =>
+    splitIntoSubtitles(text).map((sentence) => ({ text: sentence, sourceIndex })),
+  )
+
   // One clip per segment. The next clip is requested while the current one
   // plays, so there's no long gap between segments.
-  let nextAudio = prefetchSpeechAudio(segments[0])
+  let nextAudio = prefetchSpeechAudio(segments[0].text)
 
   for (let index = 0; index < segments.length; index += 1) {
+    onWaiting()
     const audioUrl = await nextAudio
 
     if (sequence !== speechSequence) {
@@ -238,9 +249,15 @@ export async function playSpeech(speech, environmentId, onSegment = () => {}) {
       return
     }
 
-    nextAudio = index + 1 < segments.length ? prefetchSpeechAudio(segments[index + 1]) : null
-    const subtitles = followAudioWithSubtitles(segments[index], (subtitle) => onSegment(index, subtitle))
-    await playAudioUrl(audioUrl, true, subtitles)
+    nextAudio = index + 1 < segments.length
+      ? prefetchSpeechAudio(segments[index + 1].text)
+      : null
+    const subtitles = followAudioWithSubtitles(
+      segments[index].text,
+      (subtitle) => onSegment(segments[index].sourceIndex, subtitle),
+      () => onSegment(segments[index].sourceIndex, ''),
+    )
+    await playAudioUrl(audioUrl, true, subtitles, { onStart })
 
     if (sequence !== speechSequence) {
       return
@@ -248,9 +265,21 @@ export async function playSpeech(speech, environmentId, onSegment = () => {}) {
   }
 }
 
-export function playThinkingSpeech(environmentId) {
+export function playThinkingSpeech(environmentId, callbacks = {}) {
   stopSpeech()
   const speech = getPregeneratedSpeech(environmentId, 'thinking')
+  const onSegment = callbacks.onSegment || (() => {})
+  const subtitles = followAudioWithSubtitles(
+    speech.text,
+    (subtitle) => onSegment(0, subtitle),
+    () => onSegment(0, ''),
+  )
 
-  return playAudioUrl(getPregeneratedSpeechUrl(environmentId, speech))
+  callbacks.onWaiting?.()
+  return playAudioUrl(
+    getPregeneratedSpeechUrl(environmentId, speech),
+    false,
+    subtitles,
+    { onStart: callbacks.onStart },
+  )
 }

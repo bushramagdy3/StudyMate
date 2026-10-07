@@ -4,6 +4,21 @@ import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 
 GlobalWorkerOptions.workerSrc = pdfWorkerUrl
 
+function safelyCall(resource, method) {
+  if (!resource || typeof resource[method] !== 'function') {
+    return
+  }
+
+  try {
+    const result = resource[method]()
+    if (result && typeof result.catch === 'function') {
+      result.catch(() => {})
+    }
+  } catch {
+    // PDF.js resources may already be released during cancellation or StrictMode cleanup.
+  }
+}
+
 export function PdfSlideViewer({ pdfUrl, slideNumber, topicTitle }) {
   const hostRef = useRef(null)
   const canvasRef = useRef(null)
@@ -12,20 +27,19 @@ export function PdfSlideViewer({ pdfUrl, slideNumber, topicTitle }) {
 
   useEffect(() => {
     if (!pdfUrl) {
-      setPdfDocument(null)
-      setStatus('empty')
       return undefined
     }
 
     const controller = new AbortController()
     let cancelled = false
     let loadingTask = null
-
-    setPdfDocument(null)
-    setStatus('loading')
+    let loadedDocument = null
 
     async function loadPdf() {
       try {
+        setPdfDocument(null)
+        setStatus('loading')
+
         // Read the Blob URL on the main thread and hand PDF.js the bytes.
         // This is more reliable than asking the PDF worker to fetch a Blob URL.
         const response = await fetch(pdfUrl, { signal: controller.signal })
@@ -40,9 +54,10 @@ export function PdfSlideViewer({ pdfUrl, slideNumber, topicTitle }) {
 
         loadingTask = getDocument({ data: new Uint8Array(bytes) })
         const document = await loadingTask.promise
+        loadedDocument = document
 
         if (cancelled) {
-          await document.destroy()
+          safelyCall(document, 'destroy')
           return
         }
 
@@ -60,7 +75,8 @@ export function PdfSlideViewer({ pdfUrl, slideNumber, topicTitle }) {
     return () => {
       cancelled = true
       controller.abort()
-      loadingTask?.destroy()
+      safelyCall(loadingTask, 'destroy')
+      safelyCall(loadedDocument, 'destroy')
     }
   }, [pdfUrl])
 
@@ -79,7 +95,7 @@ export function PdfSlideViewer({ pdfUrl, slideNumber, topicTitle }) {
         return
       }
 
-      renderTask?.cancel()
+      safelyCall(renderTask, 'cancel')
       renderTask = null
 
       try {
@@ -164,16 +180,10 @@ export function PdfSlideViewer({ pdfUrl, slideNumber, topicTitle }) {
         cancelAnimationFrame(animationFrame)
       }
 
-      renderTask?.cancel()
-      renderedPage?.cleanup()
+      safelyCall(renderTask, 'cancel')
+      safelyCall(renderedPage, 'cleanup')
     }
   }, [pdfDocument, slideNumber])
-
-  useEffect(() => {
-    return () => {
-      pdfDocument?.destroy()
-    }
-  }, [pdfDocument])
 
   if (!pdfUrl) {
     return (
