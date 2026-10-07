@@ -63,6 +63,7 @@ class PendingQuestion(TypedDict):
 
 class TopicProgress(TypedDict):
     segments: list[str]
+    segment_slides: list[int]
     question_points: list[int]
     segment_index: int  # where to pick the topic up again
 
@@ -85,6 +86,7 @@ class TeacherState(TypedDict):
     current_topic: int | None  # None until the outline exists, and after the end
     current_slide: int | None
     segments: list[str]  # the current topic's explanation, split into short parts
+    segment_slides: list[int]  # slide/page to show for each explanation segment
     segment_index: int  # next segment to say; on raise_hand, the one to resume from
     question_points: list[int]  # ask a question after these segment numbers, e.g. [2, 4]
     completed_topics: list[int]
@@ -101,6 +103,7 @@ class TeacherState(TypedDict):
 
     # --- output of the current turn ---
     speech: list[str]  # what the teacher says now; replaced every turn
+    speech_slides: list[int]  # slides paired with the current explanation speech
 
     # --- memory ---
     history: Annotated[list[Message], operator.add]  # appended to, never replaced
@@ -118,6 +121,7 @@ def initial_state(session_id: str, request: StartSessionRequest) -> TeacherState
         "current_topic": None,
         "current_slide": request.lecture[0].slide if request.lecture else None,
         "segments": [],
+        "segment_slides": [],
         "segment_index": 0,
         "question_points": [],
         "completed_topics": [],
@@ -128,6 +132,7 @@ def initial_state(session_id: str, request: StartSessionRequest) -> TeacherState
         "event": None,
         "topic_progress": {},
         "speech": [],
+        "speech_slides": [],
         "history": [],
         "topics_to_improve": [],
         "summary": [],
@@ -179,9 +184,17 @@ def to_response(state: TeacherState) -> TeacherResponse:
         )
     )
 
+    speech_slides = (
+        state["speech_slides"]
+        if state["mode"] == Mode.EXPLAINING
+        and len(state["speech_slides"]) == len(state["speech"])
+        else []
+    )
+
     return TeacherResponse(
         session_id=state["session_id"],
         speech=state["speech"],
+        speech_slides=speech_slides,
         avatar_state=avatar_state,
         awaiting=awaiting,
         phase=state["mode"].value,

@@ -40,6 +40,9 @@ export function SessionPage({
   const [subtitle, setSubtitle] = useState('')
   const [isAudioPending, setIsAudioPending] = useState(false)
   const [avatarPosture, setAvatarPosture] = useState('idle')
+  const [displayedSlide, setDisplayedSlide] = useState(
+    initialTeacherResponse.current_slide || 1,
+  )
   const playingSegment = useRef(0)
   const actionToken = useRef(0)
   const eventRequests = useRef(new Set())
@@ -53,7 +56,7 @@ export function SessionPage({
   const currentTopic = teacherResponse.outline.find(
     (topic) => topic.index === teacherResponse.current_topic,
   )
-  const currentSlide = teacherResponse.current_slide || 1
+  const currentSlide = displayedSlide
   const introIsPlaying =
     teacherResponse.current_topic === null &&
     teacherResponse.awaiting === 'continue'
@@ -162,6 +165,10 @@ export function SessionPage({
       onSegment: (index, text) => {
         if (token === actionToken.current) {
           playingSegment.current = index
+          const nextSlide = teacherResponse.speech_slides?.[index]
+          if (nextSlide) {
+            setDisplayedSlide(nextSlide)
+          }
           setSubtitle(text)
         }
       },
@@ -195,6 +202,7 @@ export function SessionPage({
     teacherResponse.current_topic,
     teacherResponse.phase,
     teacherResponse.speech,
+    teacherResponse.speech_slides,
     teacherResponse.avatar_state,
   ])
 

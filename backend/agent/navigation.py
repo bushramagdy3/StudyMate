@@ -21,7 +21,14 @@ Each action has a check (can the student do it right now?). Step 11 rejects
 an action when its check says no.
 """
 
-from agent.explaining import enter_topic, generate_segments, next_stop, save_progress, say_part
+from agent.explaining import (
+    add_slide_transitions,
+    enter_topic,
+    generate_segments,
+    next_stop,
+    save_progress,
+    say_part,
+)
 from agent.llm import LLM, LLMError, messages
 from agent.personalities import build_system_prompt, get_personality
 from agent.questioning import topic_finished
@@ -89,6 +96,11 @@ def make_repeat_node(llm: LLM):
 
     def repeat(state: TeacherState) -> dict:
         segments, points = generate_segments(llm, state, previous=state["segments"])
+        segments, points, segment_slides = add_slide_transitions(
+            segments,
+            points,
+            state["outline"][state["current_topic"]]["source_slides"],
+        )
         return {
             "pending_question": None,
             "attempts": 0,
@@ -96,7 +108,7 @@ def make_repeat_node(llm: LLM):
                 segments,
                 points,
                 0,
-                state["outline"][state["current_topic"]]["source_slides"],
+                segment_slides,
             ),
         }
 
@@ -151,9 +163,11 @@ def finish_intro(state: TeacherState) -> dict:
         "mode": Mode.WAITING_TOPIC,
         "current_topic": None,
         "segments": [],
+        "segment_slides": [],
         "segment_index": 0,
         "question_points": [],
         "pending_question": None,
+        "speech_slides": [],
     }
 
 

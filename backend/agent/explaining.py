@@ -180,6 +180,46 @@ def generate_segments(
     return segments, points
 
 
+def slides_for_segments(segments: list[str], source_slides: list[int]) -> list[int]:
+    """Distribute sentence-sized teaching segments across a topic's source slides."""
+    if not source_slides or not segments:
+        return []
+    return [
+        source_slides[min(index * len(source_slides) // len(segments), len(source_slides) - 1)]
+        for index in range(len(segments))
+    ]
+
+
+def add_slide_transitions(
+    segments: list[str],
+    points: list[int],
+    source_slides: list[int],
+) -> tuple[list[str], list[int], list[int]]:
+    """Insert a spoken slide-change cue and preserve question boundaries."""
+    mapped_slides = slides_for_segments(segments, source_slides)
+    if not mapped_slides:
+        return segments, points, []
+
+    decorated_segments = []
+    decorated_slides = []
+    source_ends = []
+
+    for index, (segment, slide) in enumerate(zip(segments, mapped_slides)):
+        if index > 0 and slide != mapped_slides[index - 1]:
+            decorated_segments.append("[thoughtful] Let me show you the next slide.")
+            decorated_slides.append(slide)
+        decorated_segments.append(segment)
+        decorated_slides.append(slide)
+        source_ends.append(len(decorated_segments))
+
+    decorated_points = [
+        source_ends[point - 1]
+        for point in points
+        if 1 <= point <= len(source_ends)
+    ]
+    return decorated_segments, decorated_points, decorated_slides
+
+
 def fit_segments(segments: list[str], count: int) -> list[str]:
     """Drop empty segments; if there are too many, merge the extras into the last one."""
     segments = [segment.strip() for segment in segments if segment.strip()]
@@ -231,17 +271,22 @@ def make_explain_node(llm: LLM):
     def explain(state: TeacherState) -> dict:
         if not state["segments"]:
             segments, points = generate_segments(llm, state)
+            segments, points, segment_slides = add_slide_transitions(
+                segments,
+                points,
+                state["outline"][state["current_topic"]]["source_slides"],
+            )
             return say_part(
                 segments,
                 points,
                 0,
-                state["outline"][state["current_topic"]]["source_slides"],
+                segment_slides,
             )
         return say_part(
             state["segments"],
             state["question_points"],
             state["segment_index"],
-            state["outline"][state["current_topic"]]["source_slides"],
+            state["segment_slides"],
         )
 
     return explain
@@ -265,17 +310,26 @@ def say_part(
     segments: list[str],
     points: list[int],
     segment_index: int,
-    slide_numbers: list[int] | None = None,
+    segment_slides: list[int] | None = None,
 ) -> dict:
     """State update that says the part of the explanation starting at segment_index."""
     segment_index = min(segment_index, len(segments) - 1)
-    speech = segments[segment_index : next_stop(segment_index, points, len(segments))]
+    stop = next_stop(segment_index, points, len(segments))
+    speech = segments[segment_index:stop]
+    segment_slides = segment_slides or []
+    current_slide = (
+        segment_slides[segment_index]
+        if len(segment_slides) == len(segments)
+        else slide_for_segment(segments, segment_index, segment_slides)
+    )
     return {
         "segments": segments,
+        "segment_slides": segment_slides,
         "question_points": points,
         "segment_index": segment_index,
-        "current_slide": slide_for_segment(segments, segment_index, slide_numbers),
+        "current_slide": current_slide,
         "speech": speech,
+        "speech_slides": segment_slides[segment_index:stop],
         "mode": Mode.EXPLAINING,
         "history": [{"role": "teacher", "text": " ".join(speech)}],
     }
@@ -304,6 +358,7 @@ def save_progress(state: TeacherState) -> dict:
     if topic is not None and state["segments"]:
         progress[topic] = {
             "segments": state["segments"],
+            "segment_slides": state["segment_slides"],
             "question_points": state["question_points"],
             "segment_index": resume_index(state),
         }
@@ -336,5 +391,5 @@ def enter_topic(state: TeacherState, topic: int, progress: dict, restart_current
         saved["segments"],
         saved["question_points"],
         start,
-        state["outline"][topic]["source_slides"],
+        saved.get("segment_slides", []),
     )

@@ -6,6 +6,7 @@ import pytest
 from agent import llm as llm_module
 from agent.contract import Environment, LectureChunk, StartSessionRequest
 from agent.explaining import (
+    add_slide_transitions,
     choose_question_points,
     default_question_points,
     explain_prompt,
@@ -196,3 +197,34 @@ def test_bad_llm_question_points_fall_back_to_default():
     update = make_explain_node(llm)(make_state())
     assert update["question_points"] == [2, 4]
     assert update["speech"] == ["s0", "s1"]
+
+
+def test_slide_transitions_are_spoken_and_keep_question_boundaries():
+    segments, points, slides = add_slide_transitions(
+        ["first", "second", "third", "fourth"],
+        [2, 4],
+        [2, 3],
+    )
+
+    assert segments == [
+        "first",
+        "second",
+        "[thoughtful] Let me show you the next slide.",
+        "third",
+        "fourth",
+    ]
+    assert slides == [2, 2, 3, 3, 3]
+    assert points == [2, 5]
+
+
+def test_explanation_response_pairs_each_played_segment_with_a_slide():
+    multi_slide_outline = OUTLINE[:1]
+    multi_slide_outline[0] = multi_slide_outline[0] | {"source_slides": [2, 3]}
+    llm, _ = fake_llm(["first", "second", "third", "fourth"], question_after=[2, 4])
+    update = make_explain_node(llm)(
+        make_state(outline=multi_slide_outline)
+    )
+
+    assert update["speech"] == ["first", "second"]
+    assert update["speech_slides"] == [2, 2]
+    assert update["segment_slides"] == [2, 2, 3, 3, 3]

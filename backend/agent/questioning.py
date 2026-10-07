@@ -229,10 +229,12 @@ def next_topic(state: TeacherState) -> dict:
         "current_topic": None,
         "topic_progress": progress,
         "segments": [],
+        "segment_slides": [],
         "segment_index": 0,
         "question_points": [],
         "pending_question": None,
         "attempts": 0,
         "speech": [],
+        "speech_slides": [],
         "mode": Mode.WAITING_TOPIC,
     }

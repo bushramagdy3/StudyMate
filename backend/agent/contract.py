@@ -164,6 +164,9 @@ class TeacherResponse(_Model):
     # each one to TTS and plays them in order. Splitting lets the agent know
     # where it was if the student raises their hand.
     speech: list[str]
+    # The slide to show as each speech item starts. This is only populated for
+    # explanations; other teacher turns keep the current slide on screen.
+    speech_slides: list[int] = Field(default_factory=list)
     avatar_state: AvatarState
     awaiting: Awaiting
     phase: str = ""
@@ -185,6 +188,8 @@ class TeacherResponse(_Model):
         missing = [i for i in self.completed_topics if i not in valid]
         if missing:
             raise ValueError(f"completed_topics {missing} are not in the outline")
+        if self.speech_slides and len(self.speech_slides) != len(self.speech):
+            raise ValueError("speech_slides must match the number of speech segments")
         return self
 
 
