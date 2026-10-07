@@ -205,7 +205,7 @@ export function SessionPage({
           data-posture={avatarPosture}
         />
 
-        {subtitle && (
+        {subtitle && !isPending && (
           // key: each new subtitle is a new element, so it pops in like the panels.
           <p key={subtitle} className="session-subtitles">
             {subtitle}
