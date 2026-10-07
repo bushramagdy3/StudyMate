@@ -20,6 +20,8 @@ export function SessionPage({
   const [teacherResponse, setTeacherResponse] = useState(initialTeacherResponse)
   const [isPending, setIsPending] = useState(false)
   const [requestError, setRequestError] = useState('')
+  const [subtitle, setSubtitle] = useState('')
+  const playingSegment = useRef(0)
   const actionToken = useRef(0)
   const eventRequests = useRef(new Set())
 
@@ -107,7 +109,10 @@ export function SessionPage({
   useEffect(() => {
     const token = actionToken.current
 
-    playSpeech(teacherResponse.speech, environment.id)
+    playSpeech(teacherResponse.speech, environment.id, (index, text) => {
+      playingSegment.current = index
+      setSubtitle(text)
+    })
       .then(() => {
         if (
           token === actionToken.current &&
@@ -145,7 +150,7 @@ export function SessionPage({
       return
     }
 
-    sendEvent({ type: 'raise_hand', segment_index: 0 })
+    sendEvent({ type: 'raise_hand', segment_index: playingSegment.current })
   }
 
   function sendMessage(text) {
@@ -199,6 +204,13 @@ export function SessionPage({
           alt=""
           data-posture={avatarPosture}
         />
+
+        {subtitle && (
+          // key: each new subtitle is a new element, so it pops in like the panels.
+          <p key={subtitle} className="session-subtitles">
+            {subtitle}
+          </p>
+        )}
       </section>
 
       <SessionOutline
