@@ -10,7 +10,7 @@ let currentAudio = null
 let currentBackendRequest = null
 let playToken = 0
 
-function stopCurrentAudio() {
+export function stopSpeech() {
   playToken += 1
 
   if (currentBackendRequest) {
@@ -27,7 +27,7 @@ function stopCurrentAudio() {
 }
 
 function playAudioUrl(audioUrl, shouldRevoke = false) {
-  stopCurrentAudio()
+  stopSpeech()
   const token = playToken
 
   return new Promise((resolve, reject) => {
@@ -63,7 +63,7 @@ function playAudioUrl(audioUrl, shouldRevoke = false) {
 }
 
 async function playBackendSpeech(text) {
-  stopCurrentAudio()
+  stopSpeech()
   const token = playToken
   const controller = new AbortController()
   currentBackendRequest = controller

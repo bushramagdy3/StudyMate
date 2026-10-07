@@ -3,6 +3,7 @@ import './App.css'
 import { AboutPopup } from './components/AboutPopup.jsx'
 import { Header } from './components/Header.jsx'
 import { LoadingPopup } from './components/LoadingPopup.jsx'
+import { deleteSession, startSession } from './api/studyMateApi.js'
 import { environments } from './data/environments.js'
 import { ChooseEnvironmentPage } from './pages/ChooseEnvironmentPage.jsx'
 import { HomePage } from './pages/HomePage.jsx'
@@ -33,13 +34,16 @@ function App() {
   const [page, setPage] = useState(getInitialPage)
   const [isAboutOpen, setIsAboutOpen] = useState(false)
   const [isLoadingSession, setIsLoadingSession] = useState(false)
-  const loadingTimer = useRef(null)
+  const [sessionError, setSessionError] = useState('')
   const [pdfName, setPdfName] = useState(
     () => new URLSearchParams(window.location.search).get('file') || '',
   )
+  const [pdfFile, setPdfFile] = useState(null)
   const [pdfUrl, setPdfUrl] = useState('')
   const pdfUrlRef = useRef('')
+  const startSessionRequest = useRef(null)
   const [environmentId, setEnvironmentId] = useState(getInitialEnvironmentId)
+  const [teacherResponse, setTeacherResponse] = useState(null)
 
   const selectedEnvironment =
     environments.find((environment) => environment.id === environmentId) ||
@@ -47,13 +51,20 @@ function App() {
 
   useEffect(() => {
     return () => {
-      window.clearTimeout(loadingTimer.current)
+      abortStartSession()
 
       if (pdfUrlRef.current) {
         URL.revokeObjectURL(pdfUrlRef.current)
       }
     }
   }, [])
+
+  function abortStartSession() {
+    if (startSessionRequest.current) {
+      startSessionRequest.current.abort()
+      startSessionRequest.current = null
+    }
+  }
 
   function changePdfFile(file) {
     if (pdfUrlRef.current) {
@@ -62,10 +73,12 @@ function App() {
     }
 
     if (!file) {
+      setPdfFile(null)
       setPdfUrl('')
       return
     }
 
+    setPdfFile(file)
     const nextPdfUrl = URL.createObjectURL(file)
     pdfUrlRef.current = nextPdfUrl
     setPdfUrl(nextPdfUrl)
@@ -76,6 +89,11 @@ function App() {
       return
     }
 
+    if (isLoadingSession && nextPage !== 'session') {
+      abortStartSession()
+      setIsLoadingSession(false)
+    }
+
     const nextHash =
       nextPage === 'session' ? `#session/${nextEnvironmentId}` : `#${nextPage}`
 
@@ -83,18 +101,64 @@ function App() {
     setPage(nextPage)
   }
 
-  function openSessionAfterLoading() {
-    if (!environmentExists(environmentId)) {
+  async function openSessionAfterLoading() {
+    if (!environmentExists(environmentId) || !pdfFile) {
       return
     }
 
-    window.clearTimeout(loadingTimer.current)
+    setSessionError('')
     setIsLoadingSession(true)
+    abortStartSession()
 
-    loadingTimer.current = window.setTimeout(() => {
+    const controller = new AbortController()
+    startSessionRequest.current = controller
+
+    try {
+      const response = await startSession({
+        environmentId,
+        pdfFile,
+        signal: controller.signal,
+      })
+
+      if (startSessionRequest.current !== controller) {
+        return
+      }
+
+      startSessionRequest.current = null
+      setTeacherResponse(response)
       setIsLoadingSession(false)
       goToPage('session', environmentId)
-    }, 10000)
+    } catch (error) {
+      if (error.name === 'AbortError') {
+        return
+      }
+
+      if (startSessionRequest.current === controller) {
+        startSessionRequest.current = null
+      }
+
+      setIsLoadingSession(false)
+      setSessionError(error.message || 'Could not start the session.')
+    }
+  }
+
+  async function endSession() {
+    const sessionId = teacherResponse?.session_id
+
+    abortStartSession()
+    setTeacherResponse(null)
+    setIsLoadingSession(false)
+    goToPage('home')
+
+    if (!sessionId) {
+      return
+    }
+
+    try {
+      await deleteSession(sessionId)
+    } catch (error) {
+      console.error(error)
+    }
   }
 
   return (
@@ -102,7 +166,7 @@ function App() {
       <Header
         isSession={page === 'session'}
         onAbout={() => setIsAboutOpen(true)}
-        onEndSession={() => goToPage('home')}
+        onEndSession={endSession}
         onHome={() => goToPage('home')}
       />
 
@@ -130,11 +194,17 @@ function App() {
           onSelectEnvironment={setEnvironmentId}
           onBack={() => goToPage('upload')}
           onContinue={openSessionAfterLoading}
+          sessionError={sessionError}
         />
       )}
 
-      {page === 'session' && (
-        <SessionPage environment={selectedEnvironment} pdfUrl={pdfUrl} />
+      {page === 'session' && teacherResponse && (
+        <SessionPage
+          environment={selectedEnvironment}
+          initialTeacherResponse={teacherResponse}
+          pdfUrl={pdfUrl}
+          onTeacherResponseChange={setTeacherResponse}
+        />
       )}
 
       {isAboutOpen && (

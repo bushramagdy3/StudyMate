@@ -526,6 +526,15 @@ button {
   height: auto;
 }
 
+.flow-error {
+  color: #ffb39f;
+  font-size: clamp(14px, 1.1vw, 18px);
+  line-height: 1.35;
+  margin: -1.2vw 0 0;
+  text-align: center;
+  text-shadow: 3px 3px 0 #000;
+}
+
 .back-flow-button {
   width: 47.3%;
 }

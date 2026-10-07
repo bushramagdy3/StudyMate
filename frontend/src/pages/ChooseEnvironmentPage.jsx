@@ -9,6 +9,7 @@ export function ChooseEnvironmentPage({
   onSelectEnvironment,
   onBack,
   onContinue,
+  sessionError = '',
 }) {
   const canContinue = Boolean(selectedEnvironmentId)
 
@@ -44,6 +45,12 @@ export function ChooseEnvironmentPage({
             <img src={continueButton} alt="Continue" />
           </button>
         </div>
+
+        {sessionError && (
+          <p className="flow-error" role="alert">
+            {sessionError}
+          </p>
+        )}
       </section>
     </Screen>
   )
