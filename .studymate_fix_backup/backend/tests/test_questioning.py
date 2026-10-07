@@ -95,7 +95,7 @@ def test_ask_question_node():
     assert update["speech"] == [QUESTION["question"]]
     assert update["mode"] is Mode.AWAITING_ANSWER
     assert update["attempts"] == 0
-    assert "Regina" in sent[0]["messages"][0]["content"]
+    assert "Regina" in sent[0]["messages"][0]["content"]  # personality is used
 
 
 def test_ask_question_falls_back_when_llm_fails():
@@ -136,7 +136,7 @@ def test_correct_first_try_praises_and_continues():
     assert update["speech"] == ["Yes! Requests overlap."]
     assert update["mode"] is Mode.FEEDBACK
     assert update["pending_question"] is None
-    assert "topics_to_improve" not in update
+    assert "topics_to_improve" not in update  # no mistake
     assert update["history"] == [
         {"role": "student", "text": "it doesn't wait"},
         {"role": "teacher", "text": "Yes! Requests overlap."},
@@ -150,16 +150,16 @@ def test_wrong_first_try_gives_a_hint_and_waits_again():
     assert update["speech"] == ["Close! Think about waiting."]
     assert update["mode"] is Mode.AWAITING_ANSWER
     assert update["attempts"] == 1
-    assert "pending_question" not in update
-    assert update["topics_to_improve"] == [0]
+    assert "pending_question" not in update  # same question stays
+    assert update["topics_to_improve"] == [0]  # a mistake, even if they get it right next
 
 
 def test_correct_on_retry_praises():
     llm, _ = fake_llm({"correct": True, "response": "There you go!"})
-    state = answering_state(attempts=1) | {"topics_to_improve": [0]}
+    state = answering_state(attempts=1) | {"topics_to_improve": [0]}  # wrong the first time
     update = make_evaluate_answer_node(llm)(state)
     assert update["mode"] is Mode.FEEDBACK
-    assert "topics_to_improve" not in update
+    assert "topics_to_improve" not in update  # stays on the list
 
 
 def test_wrong_on_last_try_reveals_and_continues():
@@ -184,7 +184,7 @@ def test_grading_failure_gives_answer_without_scoring():
 
     assert update["speech"] == [f"The answer is: {QUESTION['expected_answer']}. {QUESTION['explanation']}"]
     assert update["mode"] is Mode.FEEDBACK
-    assert "topics_to_improve" not in update
+    assert "topics_to_improve" not in update  # not counted against them
 
 
 def test_mark_to_improve_lists_each_topic_once():
@@ -200,18 +200,15 @@ def test_topic_finished():
     assert topic_finished(make_state(segment_index=4))
 
 
-def test_finished_topic_is_marked_complete_and_waits_for_the_outline():
+def test_next_topic_moves_on_and_resets():
     update = next_topic(make_state(segment_index=4))
-    assert update["current_topic"] is None
+    assert update["current_topic"] == 1
     assert update["completed_topics"] == [0]
     assert update["segments"] == [] and update["question_points"] == []
     assert update["segment_index"] == 0
-    assert update["speech"] == []
-    assert update["mode"] is Mode.WAITING_TOPIC
 
 
-def test_last_topic_also_waits_instead_of_auto_advancing():
+def test_next_topic_after_the_last_one_ends():
     update = next_topic(make_state(current_topic=1, completed_topics=[0], segment_index=4))
     assert update["current_topic"] is None
     assert update["completed_topics"] == [0, 1]
-    assert update["mode"] is Mode.WAITING_TOPIC

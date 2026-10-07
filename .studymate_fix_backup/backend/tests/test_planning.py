@@ -29,7 +29,7 @@ PLAN = {
             "title": "HTTP/1.1 Pipelining",
             "summary": "How pipelining sends requests without waiting.",
             "key_points": ["several requests at once", " "],
-            "source_slides": [2, 2, 99],
+            "source_slides": [2, 2, 99],  # duplicate and made-up slide number
         },
         {
             "title": "Head-of-Line Blocking",
@@ -66,8 +66,8 @@ def test_plan_lecture_returns_clean_outline():
     outline = plan_lecture(llm, LECTURE)
 
     assert [topic["title"] for topic in outline] == ["HTTP/1.1 Pipelining", "Head-of-Line Blocking"]
-    assert outline[0]["source_slides"] == [2]
-    assert outline[0]["key_points"] == ["several requests at once"]
+    assert outline[0]["source_slides"] == [2]  # duplicate and slide 99 removed
+    assert outline[0]["key_points"] == ["several requests at once"]  # blank point removed
 
     prompt = sent[0]["messages"][1]["content"]
     assert "Slide 3:\nHead-of-line blocking" in prompt
@@ -109,7 +109,7 @@ def test_long_lectures_are_condensed_before_planning(monkeypatch):
     outline = plan_lecture(llm, LECTURE)
 
     condense_calls = [b for b in sent if "short notes" in b["messages"][1]["content"]]
-    assert len(condense_calls) == 2
+    assert len(condense_calls) == 2  # slides were split into two batches
     planning_prompt = sent[-1]["messages"][1]["content"]
     assert "Slide 4:\nnotes 4" in planning_prompt
     assert outline[1]["title"] == "Head-of-Line Blocking"
@@ -123,17 +123,13 @@ def test_slides_text_returns_full_slide_content():
     )
 
 
-def test_plan_node_sets_up_intro_and_waits_for_topic_choice():
+def test_plan_node_sets_up_the_lecture():
     llm, _ = fake_llm(lambda body: json_reply(PLAN))
     state = initial_state("abc", StartSessionRequest(environment=Environment.CAFE, lecture=LECTURE))
 
     update = make_plan_node(llm)(state)
 
     assert len(update["outline"]) == 2
-    assert update["current_topic"] is None
-    assert update["current_slide"] == 1
+    assert update["current_topic"] == 0
     assert update["segment_index"] == 0
-    assert update["mode"] is Mode.INTRO
-    assert update["speech"]
-    assert "Web Protocols" in update["speech"][0]
-    assert "Choose a topic" in update["speech"][0]
+    assert update["mode"] is Mode.EXPLAINING

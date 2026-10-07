@@ -4,28 +4,24 @@ import handIcon from '../assets/generated-icons/hand-transparent.png'
 const placeholders = {
   answer: 'Type your answer...',
   continue: 'Type your question or share a thought...',
-  nothing: 'Choose a topic from the outline...',
+  nothing: 'Session ended.',
   question: 'Type your question...',
 }
 
 export function MessageBar({
   awaiting,
   canRaiseHand = false,
-  disabled = false,
   onRaiseHand,
   onSendMessage,
 }) {
   const [message, setMessage] = useState('')
-  const canSend =
-    !disabled &&
-    ['answer', 'question'].includes(awaiting) &&
-    Boolean(message.trim())
+  const canSend = ['answer', 'question'].includes(awaiting) && Boolean(message.trim())
   const isHandRaised = awaiting === 'question'
 
   function sendMessage() {
     const text = message.trim()
 
-    if (!text || disabled) {
+    if (!text) {
       return
     }
 
@@ -37,14 +33,14 @@ export function MessageBar({
     <section className="message-bar" aria-label="Ask a question">
       <input
         className="message-input"
-        disabled={disabled || awaiting === 'continue' || awaiting === 'nothing'}
+        disabled={awaiting === 'continue' || awaiting === 'nothing'}
         onChange={(event) => setMessage(event.target.value)}
         onKeyDown={(event) => {
           if (event.key === 'Enter' && canSend) {
             sendMessage()
           }
         }}
-        placeholder={disabled ? 'Thinking...' : placeholders[awaiting] || placeholders.continue}
+        placeholder={placeholders[awaiting] || placeholders.continue}
         type="text"
         value={message}
       />
@@ -60,7 +56,7 @@ export function MessageBar({
 
       <button
         className={isHandRaised ? 'raise-hand raised' : 'raise-hand'}
-        disabled={disabled || (!canRaiseHand && !isHandRaised)}
+        disabled={!canRaiseHand && !isHandRaised}
         type="button"
         aria-pressed={isHandRaised}
         onClick={onRaiseHand}

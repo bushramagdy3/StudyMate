@@ -1,5 +1,5 @@
 """Whole lectures through the real graph, with a fake LLM that answers each
-kind of prompt (plan, explain, question, grading, student question, summary)."""
+kind of prompt (plan, explain, question, grading, student question, goodbye)."""
 
 import json
 
@@ -25,7 +25,7 @@ from agent.llm import LLM
 from agent.teacher import EventNotAllowed, SessionNotFound, Teacher
 
 LECTURE = [
-    LectureChunk(slide=1, text="HTTP Performance\nHTTP/1.1 pipelining sends requests without waiting."),
+    LectureChunk(slide=1, text="HTTP/1.1 pipelining sends requests without waiting."),
     LectureChunk(slide=2, text="Head-of-line blocking: one slow response blocks the rest."),
 ]
 
@@ -84,108 +84,67 @@ def teacher():
     return Teacher(llm=LLM("key", "model", transport=transport))
 
 
-def start(teacher, environment=Environment.CAFE):
+def start(teacher, environment=Environment.CAFE):  # café: 3 segments, 1 question per topic
     return teacher.start_session(StartSessionRequest(environment=environment, lecture=LECTURE))
 
 
-def finish_intro(teacher, session_id):
-    return teacher.send_event(session_id, ContinueEvent())
-
-
-def start_topic(teacher, session_id, topic=0):
-    return teacher.send_event(session_id, GoToTopicEvent(topic_index=topic))
-
-
-def ready_topic(teacher, environment=Environment.CAFE, topic=0):
-    first = start(teacher, environment)
-    finish_intro(teacher, first.session_id)
-    return start_topic(teacher, first.session_id, topic)
-
-
-def test_start_returns_intro_before_any_topic(teacher):
+def test_start_plans_and_starts_explaining(teacher):
     response = start(teacher)
 
     assert [t.title for t in response.outline] == ["Pipelining", "Head-of-Line Blocking"]
-    assert response.current_topic is None
-    assert response.current_slide == 1
-    assert len(response.speech) == 1
-    assert "HTTP Performance" in response.speech[0]
-    assert "Choose a topic" in response.speech[0]
+    assert response.current_topic == 0
+    assert response.speech == ["e1-s0", "e1-s1", "e1-s2"]
     assert response.avatar_state is AvatarState.SPEAKING
     assert response.awaiting is Awaiting.CONTINUE
-    assert not response.can_raise_hand
+    assert response.can_raise_hand
 
 
-def test_intro_finishes_then_waits_for_student_topic_choice(teacher):
-    first = start(teacher)
-    waiting = finish_intro(teacher, first.session_id)
-
-    assert waiting.current_topic is None
-    assert waiting.speech == []
-    assert waiting.awaiting is Awaiting.NOTHING
-    assert waiting.avatar_state is AvatarState.IDLE
-
-    topic = start_topic(teacher, first.session_id, 0)
-    assert topic.current_topic == 0
-    assert topic.speech == ["e1-s0", "e1-s1", "e1-s2"]
-    assert topic.awaiting is Awaiting.CONTINUE
-
-
-def test_a_whole_lecture_uses_manual_topic_selection(teacher):
-    first = start(teacher)
-    session = first.session_id
+def test_a_whole_lecture(teacher):
+    session = start(teacher).session_id
     send = lambda event: teacher.send_event(session, event)
 
-    send(ContinueEvent())
-    topic1 = send(GoToTopicEvent(topic_index=0))
-    assert topic1.speech == ["e1-s0", "e1-s1", "e1-s2"]
-
-    question = send(ContinueEvent())
+    question = send(ContinueEvent())  # explanation finished -> question
     assert question.speech == ["Why is it faster?"]
     assert question.awaiting is Awaiting.ANSWER
 
-    hint = send(AnswerEvent(text="no idea"))
+    hint = send(AnswerEvent(text="no idea"))  # wrong -> hint, same question
     assert hint.speech == ["Not quite, try again."]
     assert hint.awaiting is Awaiting.ANSWER
 
     praise = send(AnswerEvent(text="right, no waiting"))
     assert praise.speech == ["Correct!"]
     assert praise.awaiting is Awaiting.CONTINUE
+    assert not praise.can_raise_hand  # feedback, not explaining
 
-    waiting = send(ContinueEvent())
-    assert waiting.current_topic is None
-    assert waiting.completed_topics == [0]
-    assert waiting.speech == []
-
-    topic2 = send(GoToTopicEvent(topic_index=1))
+    topic2 = send(ContinueEvent())  # topic 1 done -> topic 2
     assert topic2.current_topic == 1
+    assert topic2.completed_topics == [0]
     assert topic2.speech == ["e2-s0", "e2-s1", "e2-s2"]
 
     send(ContinueEvent())
     send(AnswerEvent(text="right"))
-    done = send(ContinueEvent())
-    assert done.current_topic is None
-    assert done.completed_topics == [0, 1]
-    assert done.awaiting is Awaiting.NOTHING
+    goodbye = send(ContinueEvent())  # last topic done -> goodbye
+    assert goodbye.speech == ["Goodbye!"]
+    assert goodbye.awaiting is Awaiting.NOTHING
+    assert goodbye.completed_topics == [0, 1]
+
+    with pytest.raises(EventNotAllowed):
+        send(ContinueEvent())  # it's over
 
 
-def test_two_wrong_answers_reveal_then_wait_for_outline(teacher):
-    topic = ready_topic(teacher)
-    session = topic.session_id
+def test_two_wrong_answers_reveal_and_move_on(teacher):
+    session = start(teacher).session_id
     teacher.send_event(session, ContinueEvent())
     teacher.send_event(session, AnswerEvent(text="no"))
     reveal = teacher.send_event(session, AnswerEvent(text="still no"))
-    assert reveal.awaiting is Awaiting.CONTINUE
-    waiting = teacher.send_event(session, ContinueEvent())
-    assert waiting.current_topic is None
-    assert waiting.completed_topics == [0]
+    assert reveal.awaiting is Awaiting.CONTINUE  # feedback, then the lecture goes on
+    assert teacher.send_event(session, ContinueEvent()).current_topic == 1
 
 
 def test_raise_hand_and_resume_from_that_segment(teacher):
-    topic = ready_topic(teacher)
-    session = topic.session_id
+    session = start(teacher).session_id
 
-    hand = teacher.send_event(session, RaiseHandEvent(segment_index=1))
+    hand = teacher.send_event(session, RaiseHandEvent(segment_index=1))  # during e1-s1
     assert hand.awaiting is Awaiting.QUESTION
     assert hand.avatar_state is AvatarState.LISTENING
 
@@ -194,13 +153,12 @@ def test_raise_hand_and_resume_from_that_segment(teacher):
     assert not answer.can_raise_hand
 
     resumed = teacher.send_event(session, ContinueEvent())
-    assert resumed.speech == ["e1-s1", "e1-s2"]
+    assert resumed.speech == ["e1-s1", "e1-s2"]  # replays from the interrupted segment
 
 
 def test_click_another_topic_then_come_back_resumes(teacher):
-    topic1 = ready_topic(teacher)
-    session = topic1.session_id
-    teacher.send_event(session, RaiseHandEvent(segment_index=0))
+    session = start(teacher).session_id
+    teacher.send_event(session, RaiseHandEvent(segment_index=0))  # hand up, then changes mind
 
     topic2 = teacher.send_event(session, GoToTopicEvent(topic_index=1))
     assert topic2.current_topic == 1
@@ -208,49 +166,46 @@ def test_click_another_topic_then_come_back_resumes(teacher):
 
     back = teacher.send_event(session, GoToTopicEvent(topic_index=0))
     assert back.current_topic == 0
-    assert back.speech == ["e1-s0", "e1-s1", "e1-s2"]
+    assert back.speech == ["e1-s0", "e1-s1", "e1-s2"]  # same explanation, no new LLM call
 
 
 def test_clicking_a_topic_during_a_question_and_back_replays_that_part(teacher):
-    topic1 = ready_topic(teacher)
-    session = topic1.session_id
-    teacher.send_event(session, ContinueEvent())
+    session = start(teacher).session_id
+    teacher.send_event(session, ContinueEvent())  # question waiting
     teacher.send_event(session, GoToTopicEvent(topic_index=1))
     back = teacher.send_event(session, GoToTopicEvent(topic_index=0))
     assert back.speech == ["e1-s0", "e1-s1", "e1-s2"]
     assert teacher.send_event(session, ContinueEvent()).speech == ["Why is it faster?"]
 
 
-def test_replay_finished_topic_does_not_auto_start_another_topic(teacher):
-    topic1 = ready_topic(teacher)
-    session = topic1.session_id
+def test_replaying_a_finished_topic_returns_to_the_unfinished_one(teacher):
+    session = start(teacher).session_id
     send = lambda event: teacher.send_event(session, event)
-
     send(ContinueEvent())
     send(AnswerEvent(text="right"))
-    send(ContinueEvent())
+    send(ContinueEvent())  # topic 2 starts (e2)
+    send(ContinueEvent())  # topic 2's question is waiting
 
-    replay = send(RepeatEvent(topic_index=0))
-    assert replay.speech == ["e2-s0", "e2-s1", "e2-s2"]
+    replay = send(GoToTopicEvent(topic_index=0))  # finished topic: same explanation
+    assert replay.speech == ["e1-s0", "e1-s1", "e1-s2"]
     send(ContinueEvent())
     send(AnswerEvent(text="right"))
-    waiting = send(ContinueEvent())
-    assert waiting.current_topic is None
-    assert waiting.completed_topics == [0]
+    resumed = send(ContinueEvent())
+    assert resumed.current_topic == 1  # back to the unfinished topic
+    assert resumed.speech == ["e2-s0", "e2-s1", "e2-s2"]
 
 
 def test_repeat_button_reprompts_for_a_new_explanation(teacher):
-    topic = ready_topic(teacher)
-    response = teacher.send_event(topic.session_id, RepeatEvent(topic_index=0))
-    assert response.speech == ["e2-s0", "e2-s1", "e2-s2"]
+    session = start(teacher).session_id
+    response = teacher.send_event(session, RepeatEvent(topic_index=0))
+    assert response.speech == ["e2-s0", "e2-s1", "e2-s2"]  # a 2nd explanation was written
     assert response.awaiting is Awaiting.CONTINUE
 
 
 def test_repeat_is_only_for_taught_topics(teacher):
-    first = start(teacher)
-    finish_intro(teacher, first.session_id)
+    session = start(teacher).session_id
     with pytest.raises(EventNotAllowed):
-        teacher.send_event(first.session_id, RepeatEvent(topic_index=1))
+        teacher.send_event(session, RepeatEvent(topic_index=1))
 
 
 def test_end_session_deletes_everything(teacher):
@@ -265,10 +220,10 @@ def test_end_session_deletes_everything(teacher):
 @pytest.mark.parametrize(
     "event",
     [
-        AnswerEvent(text="hi"),
-        QuestionEvent(text="hi"),
-        GoToTopicEvent(topic_index=5),
-        RepeatEvent(topic_index=1),
+        AnswerEvent(text="hi"),  # no question was asked
+        QuestionEvent(text="hi"),  # hand isn't raised
+        GoToTopicEvent(topic_index=5),  # no such topic
+        RepeatEvent(topic_index=1),  # not taught yet
     ],
 )
 def test_events_at_the_wrong_time_are_rejected_and_change_nothing(teacher, event):
@@ -284,86 +239,66 @@ def test_unknown_session(teacher):
 
 
 def test_sessions_are_independent(teacher):
-    a = start(teacher)
-    b = start(teacher, Environment.LECTURE_HALL)
-    finish_intro(teacher, a.session_id)
-    start_topic(teacher, a.session_id, 0)
-    teacher.send_event(a.session_id, ContinueEvent())
-    assert teacher.get_session(a.session_id).awaiting is Awaiting.ANSWER
-    assert teacher.get_session(b.session_id).awaiting is Awaiting.CONTINUE
-    assert teacher.get_session(b.session_id).current_topic is None
+    a = start(teacher).session_id
+    b = start(teacher, Environment.LECTURE_HALL).session_id
+    teacher.send_event(a, ContinueEvent())
+    assert teacher.get_session(a).awaiting is Awaiting.ANSWER
+    assert teacher.get_session(b).awaiting is Awaiting.CONTINUE
 
 
-def test_a_long_lecture_does_not_hit_langgraph_limits(teacher):
-    first = start(teacher)
-    session = first.session_id
-    finish_intro(teacher, session)
-    start_topic(teacher, session, 0)
-    for _ in range(30):
+def test_a_long_lecture_does_not_hit_langgraph_limits():
+    transport, _ = fake_featherless()
+    teacher = Teacher(llm=LLM("key", "model", transport=transport))
+    session = start(teacher).session_id
+    for _ in range(30):  # many turns in one session
         teacher.send_event(session, GoToTopicEvent(topic_index=1))
         teacher.send_event(session, GoToTopicEvent(topic_index=0))
     assert teacher.get_session(session).awaiting is Awaiting.CONTINUE
 
 
 def test_two_question_topic_continues_with_the_next_part_after_feedback(teacher):
-    topic = ready_topic(teacher, Environment.LECTURE_HALL)
-    assert topic.speech == ["e1-s0", "e1-s1"]
+    # Professor: 2 questions per topic. The fake's [3] is invalid for 2 questions,
+    # so the default points [2, 3] are used: parts [s0, s1] and [s2].
+    session = start(teacher, Environment.LECTURE_HALL)
+    assert session.speech == ["e1-s0", "e1-s1"]
 
-    send = lambda event: teacher.send_event(topic.session_id, event)
+    send = lambda event: teacher.send_event(session.session_id, event)
     send(ContinueEvent())
     send(AnswerEvent(text="right"))
     part2 = send(ContinueEvent())
-    assert part2.speech == ["e1-s2"]
+    assert part2.speech == ["e1-s2"]  # same topic, next part
     assert part2.current_topic == 0
 
     send(ContinueEvent())
     send(AnswerEvent(text="right"))
-    waiting = send(ContinueEvent())
-    assert waiting.current_topic is None
-    assert waiting.completed_topics == [0]
+    assert send(ContinueEvent()).current_topic == 1  # now the next topic
 
 
 def test_no_langgraph_warnings_about_saved_types(teacher, caplog):
-    topic = ready_topic(teacher)
-    session = topic.session_id
+    session = start(teacher).session_id
     teacher.send_event(session, ContinueEvent())
     teacher.send_event(session, GoToTopicEvent(topic_index=1))
     assert "unregistered type" not in caplog.text
 
 
-def test_tutor_summary_before_any_topic_returns_to_outline(teacher):
+def test_tutor_summary_then_back_to_the_lecture(teacher):
     first = start(teacher, Environment.STUDY_ROOM)
     assert first.summary_available
     session = first.session_id
-    waiting = teacher.send_event(session, ContinueEvent())
-    assert waiting.current_topic is None
+    teacher.send_event(session, ContinueEvent())  # a question is waiting
 
     summary = teacher.send_event(session, SummaryEvent())
     assert summary.speech == ["Summary part 1.", "Summary part 2."]
     assert summary.awaiting is Awaiting.CONTINUE
+    assert not summary.can_raise_hand
 
     back = teacher.send_event(session, ContinueEvent())
-    assert back.current_topic is None
-    assert back.speech == []
-    assert back.awaiting is Awaiting.NOTHING
-
-
-def test_tutor_summary_during_topic_returns_to_the_lecture(teacher):
-    topic = ready_topic(teacher, Environment.STUDY_ROOM)
-    session = topic.session_id
-    teacher.send_event(session, ContinueEvent())
-
-    summary = teacher.send_event(session, SummaryEvent())
-    assert summary.speech == ["Summary part 1.", "Summary part 2."]
-    assert summary.awaiting is Awaiting.CONTINUE
-
-    back = teacher.send_event(session, ContinueEvent())
-    assert back.speech == ["e1-s0", "e1-s1"]
+    assert back.speech == ["e1-s0", "e1-s1"]  # the part the question was about
     assert teacher.send_event(session, ContinueEvent()).speech == ["Why is it faster?"]
 
 
 def test_summary_is_not_available_for_other_personalities(teacher):
-    response = start(teacher)
+    response = start(teacher)  # café
     assert not response.summary_available
     with pytest.raises(EventNotAllowed):
         teacher.send_event(response.session_id, SummaryEvent())

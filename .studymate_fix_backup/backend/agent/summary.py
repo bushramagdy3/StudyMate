@@ -89,16 +89,6 @@ def make_summary_node(llm: LLM):
 
 def back_to_lecture(state: TeacherState) -> dict:
     """The 'back_to_lecture' node: after the summary, resume exactly where they were."""
-    # A summary can be requested before the student starts any topic. In that
-    # case there is no topic to resume; simply return to the outline.
-    if state["current_topic"] is None:
-        return {
-            "speech": [],
-            "mode": Mode.WAITING_TOPIC,
-            "pending_question": None,
-            "attempts": 0,
-        }
-
     saved = state["topic_progress"].get(state["current_topic"])
     if saved and saved["segment_index"] >= len(saved["segments"]):
         # They'd finished the topic's last question: move on rather than replay it.
@@ -107,9 +97,7 @@ def back_to_lecture(state: TeacherState) -> dict:
 
 
 def after_back_to_lecture(state: TeacherState) -> str:
-    """Return to the outline, next topic, or the exact lecture position saved before summary."""
-    if state["current_topic"] is None:
-        return "wait"
+    """Next topic if the current one was finished; otherwise the lecture is set up again."""
     if topic_finished(state):
         return "next_topic"
     return "explain" if not state["segments"] else "wait"

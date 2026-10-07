@@ -5,15 +5,16 @@ The graph is always paused at the "wait" node. Each student event resumes it:
 the event is routed to the right nodes, which update the state, and the graph
 comes back to "wait" and pauses again.
 
-    start:  plan -> wait                       (intro is returned first)
+    start:  plan -> explain -> wait
 
-    wait --continue-->    continue -> finish_intro | ask_question | explain | next_topic
+    wait --continue-->    continue -> ask_question | explain | next_topic -> (explain | closing)
     wait --answer-->      take_answer -> evaluate_answer
     wait --raise_hand-->  raise_hand
     wait --question-->    take_question -> answer_student_question
     wait --go_to_topic--> go_to_topic -> (explain if it's never been started)
     wait --repeat-->      choose_repeat -> repeat
     wait --summary-->     summary   (then continue -> back_to_lecture -> where they were)
+    ... and every path ends back at wait. After the last topic: closing.
 
 Usage (e.g. from FastAPI):
     teacher = Teacher()
@@ -40,7 +41,6 @@ from agent.navigation import (
     can_repeat,
     choose_topic_to_repeat,
     continue_lecture,
-    finish_intro,
     go_to_topic,
     make_closing_node,
     make_repeat_node,
@@ -148,17 +148,15 @@ def build_graph(llm: LLM, checkpointer=None):
     # Waiting, and handling events
     graph.add_node("wait", wait)
     graph.add_node("continue", continue_lecture)
-    graph.add_node("finish_intro", finish_intro)
     graph.add_node("take_answer", take_input)
     graph.add_node("take_question", take_input)
     graph.add_node("raise_hand", handle_raise_hand)
     graph.add_node("go_to_topic", handle_go_to_topic)
     graph.add_node("choose_repeat", handle_choose_repeat)
 
-    # Start of a session: planning returns the intro. Do NOT enter explain yet,
-    # because no topic has been selected at this point.
+    # Start of a session
     graph.add_edge(START, "plan")
-    graph.add_edge("plan", "wait")
+    graph.add_edge("plan", "explain")
 
     # From wait, by event
     graph.add_conditional_edges(
@@ -169,12 +167,7 @@ def build_graph(llm: LLM, checkpointer=None):
             "go_to_topic", "choose_repeat", "summary", "back_to_lecture",
         ],
     )
-    graph.add_conditional_edges(
-        "continue",
-        after_continue,
-        ["finish_intro", "ask_question", "explain", "next_topic"],
-    )
-    graph.add_edge("finish_intro", "wait")
+    graph.add_conditional_edges("continue", after_continue, ["ask_question", "explain", "next_topic"])
     graph.add_conditional_edges("next_topic", after_next_topic, ["explain", "wait", "closing"])
     graph.add_edge("take_answer", "evaluate_answer")
     graph.add_edge("take_question", "answer_student_question")

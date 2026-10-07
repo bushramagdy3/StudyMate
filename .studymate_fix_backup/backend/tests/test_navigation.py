@@ -17,7 +17,6 @@ from agent.navigation import (
     closing_prompt,
     continue_lecture,
     fallback_closing,
-    finish_intro,
     go_to_topic,
     make_closing_node,
     make_repeat_node,
@@ -69,7 +68,7 @@ def no_retry_wait(monkeypatch):
 def test_topic_can_be_clicked_any_time_during_the_lecture():
     for mode in Mode:
         assert can_go_to_topic(make_state(mode=mode), 2) is (mode is not Mode.ENDED)
-    assert not can_go_to_topic(make_state(), 3)
+    assert not can_go_to_topic(make_state(), 3)  # no such topic
     assert not can_go_to_topic(make_state(), -1)
 
 
@@ -77,35 +76,35 @@ def test_new_topic_is_taught_from_the_start():
     state = make_state(completed_topics=[0], pending_question=QUESTION)
     update = go_to_topic(state, 2)
     assert update["current_topic"] == 2
-    assert update["segments"] == [] and update["segment_index"] == 0
+    assert update["segments"] == [] and update["segment_index"] == 0  # explain node writes it
     assert update["pending_question"] is None
     assert after_entering_topic(state | update) == "explain"
 
 
 def test_leaving_a_topic_saves_it_and_coming_back_resumes():
-    state = make_state(segment_index=1)
+    state = make_state(segment_index=1)  # in topic 0, part [s1, s2, s3] playing
     away = state | go_to_topic(state, 2)
     assert away["topic_progress"][0]["segment_index"] == 1
 
     away = away | {"segments": ["t2-s0"], "question_points": [1], "segment_index": 0}
     back = away | go_to_topic(away, 0)
     assert back["current_topic"] == 0
-    assert back["speech"] == ["s1", "s2", "s3"]
-    assert back["topic_progress"][2]["segments"] == ["t2-s0"]
-    assert after_entering_topic(back) == "wait"
+    assert back["speech"] == ["s1", "s2", "s3"]  # resumed where they left
+    assert back["topic_progress"][2]["segments"] == ["t2-s0"]  # topic 2 saved too
+    assert after_entering_topic(back) == "wait"  # already set up, no LLM call
 
 
 def test_leaving_during_a_question_resumes_the_part_it_was_about():
     state = make_state(mode=Mode.AWAITING_ANSWER, segment_index=4, pending_question=QUESTION)
     away = state | go_to_topic(state, 2)
-    assert away["topic_progress"][0]["segment_index"] == 1
+    assert away["topic_progress"][0]["segment_index"] == 1  # start of part [s1, s2, s3]
 
 
 def test_finished_topic_is_explained_again_the_same_way():
     saved = {"segments": ["s0", "s1", "s2", "s3"], "question_points": [1, 4], "segment_index": 4}
     state = make_state(current_topic=1, segments=[], completed_topics=[0], topic_progress={0: saved})
     update = go_to_topic(state, 0)
-    assert update["speech"] == ["s0"]
+    assert update["speech"] == ["s0"]  # same explanation, from the start
     assert update["segment_index"] == 0
 
 
@@ -120,9 +119,9 @@ def test_clicking_the_current_topic_restarts_it():
 
 def test_repeat_only_for_taught_topics():
     state = make_state(current_topic=1, completed_topics=[0], topic_progress={})
-    assert can_repeat(state, 0)
-    assert can_repeat(state, 1)
-    assert not can_repeat(state, 2)
+    assert can_repeat(state, 0)  # finished
+    assert can_repeat(state, 1)  # current
+    assert not can_repeat(state, 2)  # not taught yet
     assert not can_repeat(make_state(mode=Mode.ENDED), 0)
 
 
@@ -148,7 +147,7 @@ def test_repeat_a_finished_topic_uses_its_saved_explanation():
     make_repeat_node(llm)(state)
 
     assert state["current_topic"] == 0
-    assert state["topic_progress"][1]["segments"] == ["s0", "s1", "s2", "s3"]
+    assert state["topic_progress"][1]["segments"] == ["s0", "s1", "s2", "s3"]  # topic 1 saved
     prompt = sent[0]["messages"][1]["content"]
     assert '"old0"' in prompt and '"s0"' not in prompt
 
@@ -157,24 +156,14 @@ def test_repeat_a_finished_topic_uses_its_saved_explanation():
 
 
 def test_continue_checks():
-    for mode in (Mode.INTRO, Mode.EXPLAINING, Mode.FEEDBACK, Mode.ANSWERING_STUDENT, Mode.SUMMARIZING):
+    for mode in (Mode.EXPLAINING, Mode.FEEDBACK, Mode.ANSWERING_STUDENT, Mode.SUMMARIZING):
         assert can_continue(make_state(mode=mode))
-    for mode in (Mode.WAITING_TOPIC, Mode.AWAITING_ANSWER, Mode.AWAITING_STUDENT_QUESTION, Mode.ENDED):
+    for mode in (Mode.AWAITING_ANSWER, Mode.AWAITING_STUDENT_QUESTION, Mode.ENDED):
         assert not can_continue(make_state(mode=mode))
 
 
-def test_continue_after_intro_finishes_intro_and_waits_for_topic():
-    state = make_state(mode=Mode.INTRO, current_topic=None, segments=[], speech=["Welcome"])
-    assert continue_lecture(state) == {}
-    assert after_continue(state) == "finish_intro"
-    update = finish_intro(state)
-    assert update["mode"] is Mode.WAITING_TOPIC
-    assert update["current_topic"] is None
-    assert update["speech"] == []
-
-
 def test_continue_after_explaining_goes_to_the_question():
-    state = make_state(mode=Mode.EXPLAINING, segment_index=1)
+    state = make_state(mode=Mode.EXPLAINING, segment_index=1)  # part [s1, s2, s3]
     assert continue_lecture(state) == {"segment_index": 4}
     assert after_continue(state) == "ask_question"
 
@@ -185,7 +174,7 @@ def test_continue_after_mid_topic_feedback_explains_the_next_part():
     assert after_continue(state) == "explain"
 
 
-def test_continue_after_the_topics_last_feedback_marks_it_done():
+def test_continue_after_the_topics_last_feedback_moves_to_the_next_topic():
     assert after_continue(make_state(mode=Mode.FEEDBACK, segment_index=4)) == "next_topic"
 
 
@@ -195,8 +184,10 @@ def test_continue_after_answering_a_raised_hand_returns_to_the_explanation():
     assert after_continue(state) == "explain"
 
 
-def test_after_next_topic_always_waits_for_student_selection():
-    assert after_next_topic(make_state(current_topic=None, mode=Mode.WAITING_TOPIC)) == "wait"
+def test_after_next_topic():
+    assert after_next_topic(make_state(current_topic=1, segments=[])) == "explain"
+    assert after_next_topic(make_state(current_topic=1)) == "wait"  # resumed a saved topic
+    assert after_next_topic(make_state(current_topic=None)) == "closing"
 
 
 # --- end --------------------------------------------------------------------
@@ -208,7 +199,7 @@ def test_goodbye_is_short_and_names_topics_to_review(environment):
     assert "short, warm goodbye" in prompt
     assert "mistakes on questions about: Head-of-Line Blocking" in prompt
     assert "Don't recap" in prompt
-    assert "Requests without waiting" not in prompt
+    assert "Requests without waiting" not in prompt  # no recap of topic content
 
 
 def test_goodbye_without_mistakes_has_nothing_to_review():

@@ -18,14 +18,10 @@ export function SessionPage({
   onTeacherResponseChange,
 }) {
   const [teacherResponse, setTeacherResponse] = useState(initialTeacherResponse)
-  const [isPending, setIsPending] = useState(false)
-  const [requestError, setRequestError] = useState('')
   const actionToken = useRef(0)
   const eventRequests = useRef(new Set())
 
-  const avatarPosture = isPending
-    ? 'thinking'
-    : teacherResponse.avatar_state || 'idle'
+  const avatarPosture = teacherResponse.avatar_state || 'idle'
 
   const avatarImage =
     environment.avatars[avatarPosture] ||
@@ -36,9 +32,6 @@ export function SessionPage({
     (topic) => topic.index === teacherResponse.current_topic,
   )
   const currentSlide = teacherResponse.current_slide || 1
-  const introIsPlaying =
-    teacherResponse.current_topic === null &&
-    teacherResponse.awaiting === 'continue'
 
   useEffect(() => {
     const requests = eventRequests.current
@@ -60,17 +53,8 @@ export function SessionPage({
   const sendEvent = useCallback(async (event, options = {}) => {
     const token = actionToken.current + 1
     actionToken.current = token
-
-    // Never leave old audio or an older request running while the student
-    // starts a new action. Otherwise two responses can race and corrupt the UI.
-    stopSpeech()
-    eventRequests.current.forEach((request) => request.abort())
-    eventRequests.current.clear()
-
     const controller = new AbortController()
     eventRequests.current.add(controller)
-    setRequestError('')
-    setIsPending(true)
 
     if (options.playThinking) {
       playThinkingSpeech(environment.id).catch(logSpeechError)
@@ -87,16 +71,11 @@ export function SessionPage({
         applyTeacherResponse(response)
       }
     } catch (error) {
-      if (error.name !== 'AbortError' && token === actionToken.current) {
+      if (error.name !== 'AbortError') {
         console.error(error)
-        setRequestError(error.message || 'Could not continue the session.')
       }
     } finally {
       eventRequests.current.delete(controller)
-
-      if (token === actionToken.current) {
-        setIsPending(false)
-      }
     }
   }, [
     applyTeacherResponse,
@@ -127,32 +106,14 @@ export function SessionPage({
   ])
 
   function chooseTopic(topicIndex) {
-    if (isPending) {
-      return
-    }
-
-    const isCompleted = teacherResponse.completed_topics.includes(topicIndex)
-    const type = isCompleted ? 'repeat' : 'go_to_topic'
-
-    sendEvent(
-      { type, topic_index: topicIndex },
-      { playThinking: true },
-    )
+    sendEvent({ type: 'go_to_topic', topic_index: topicIndex }, { playThinking: true })
   }
 
   function raiseHand() {
-    if (isPending) {
-      return
-    }
-
     sendEvent({ type: 'raise_hand', segment_index: 0 })
   }
 
   function sendMessage(text) {
-    if (isPending) {
-      return
-    }
-
     const eventType = teacherResponse.awaiting === 'answer' ? 'answer' : 'question'
     sendEvent({ type: eventType, text }, { playThinking: true })
   }
@@ -162,12 +123,6 @@ export function SessionPage({
       <p className="visually-hidden" aria-live="polite">
         {teacherResponse.speech.join(' ')}
       </p>
-
-      {requestError && (
-        <p className="session-request-error" role="alert">
-          {requestError}
-        </p>
-      )}
 
       <section
         className="session-stage"
@@ -204,7 +159,6 @@ export function SessionPage({
       <SessionOutline
         completedTopics={teacherResponse.completed_topics}
         currentTopic={teacherResponse.current_topic}
-        disabled={isPending || introIsPlaying}
         onSelectTopic={chooseTopic}
         outline={teacherResponse.outline}
       />
@@ -212,7 +166,6 @@ export function SessionPage({
       <MessageBar
         awaiting={teacherResponse.awaiting}
         canRaiseHand={teacherResponse.can_raise_hand}
-        disabled={isPending}
         onRaiseHand={raiseHand}
         onSendMessage={sendMessage}
       />

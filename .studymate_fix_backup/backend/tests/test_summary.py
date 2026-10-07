@@ -76,12 +76,12 @@ def test_summary_is_written_once_and_reused():
 
     assert update["speech"] == ["sum1", "sum2"]
     assert update["mode"] is Mode.SUMMARIZING
-    assert update["topic_progress"][0]["segment_index"] == 2
+    assert update["topic_progress"][0]["segment_index"] == 2  # where to come back to
     assert "Regina" in sent[0]["messages"][0]["content"]
 
     again = node(make_state() | update)
     assert again["speech"] == ["sum1", "sum2"]
-    assert len(sent) == 1
+    assert len(sent) == 1  # no second LLM call
 
 
 def test_summary_fallback_when_llm_fails():
@@ -97,31 +97,14 @@ def test_back_to_lecture_resumes_where_they_were():
     state = state | make_summary_node(llm)(state)
     state = state | back_to_lecture(state)
 
-    assert state["speech"] == ["s2"]
+    assert state["speech"] == ["s2"]  # same place, not restarted
     assert state["mode"] is Mode.EXPLAINING
     assert after_back_to_lecture(state) == "wait"
 
 
 def test_back_to_lecture_after_a_finished_topic_moves_on():
     llm, _ = fake_llm(["sum"])
-    state = make_state(mode=Mode.FEEDBACK, segment_index=3)
+    state = make_state(mode=Mode.FEEDBACK, segment_index=3)  # last question answered
     state = state | make_summary_node(llm)(state)
     state = state | back_to_lecture(state)
     assert after_back_to_lecture(state) == "next_topic"
-
-
-def test_summary_before_any_topic_returns_to_the_outline():
-    llm, _ = fake_llm(["sum"])
-    state = make_state(
-        current_topic=None,
-        segments=[],
-        question_points=[],
-        mode=Mode.WAITING_TOPIC,
-    )
-    state = state | make_summary_node(llm)(state)
-    state = state | back_to_lecture(state)
-
-    assert state["current_topic"] is None
-    assert state["speech"] == []
-    assert state["mode"] is Mode.WAITING_TOPIC
-    assert after_back_to_lecture(state) == "wait"

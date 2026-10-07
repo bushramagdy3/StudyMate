@@ -27,10 +27,10 @@ def test_initial_state():
 @pytest.mark.parametrize(
     "correct, attempts, expected",
     [
-        (True, 0, "praise"),
-        (False, 0, "hint"),
-        (True, 1, "praise"),
-        (False, 1, "reveal"),
+        (True, 0, "praise"),  # right first time
+        (False, 0, "hint"),  # first wrong answer -> hint and retry
+        (True, 1, "praise"),  # right on the retry
+        (False, 1, "reveal"),  # wrong again -> give the answer
     ],
 )
 def test_feedback_kind(correct, attempts, expected):
@@ -40,8 +40,6 @@ def test_feedback_kind(correct, attempts, expected):
 @pytest.mark.parametrize(
     "mode, avatar, awaiting",
     [
-        (Mode.INTRO, AvatarState.SPEAKING, Awaiting.CONTINUE),
-        (Mode.WAITING_TOPIC, AvatarState.IDLE, Awaiting.NOTHING),
         (Mode.EXPLAINING, AvatarState.SPEAKING, Awaiting.CONTINUE),
         (Mode.FEEDBACK, AvatarState.SPEAKING, Awaiting.CONTINUE),
         (Mode.ANSWERING_STUDENT, AvatarState.SPEAKING, Awaiting.CONTINUE),
@@ -88,7 +86,7 @@ def test_state_survives_the_checkpointer(caplog):
     assert saved["environment"] is Environment.STUDY_ROOM
     assert saved["history"] == [{"role": "teacher", "text": "Welcome!"}]
     assert to_response(saved).current_topic == 0
-    assert "unregistered type" not in caplog.text
+    assert "unregistered type" not in caplog.text  # our types are allowed
 
 
 def test_summary_is_available_only_for_the_tutor():
