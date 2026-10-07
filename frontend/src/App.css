@@ -1141,35 +1141,109 @@ button {
   max-width: 100%;
 }
 
+.pdf-slide-loading,
 .pdf-slide-error {
   align-items: center;
   background: rgba(253, 250, 244, 0.94);
   color: #5b342a;
   display: flex;
   font-family: Arial, sans-serif;
+  gap: 10px;
   inset: 0;
   justify-content: center;
   padding: 6%;
   position: absolute;
   text-align: center;
   text-shadow: none;
+  z-index: 4;
 }
 
-.topic-play-icon {
-  align-items: center;
-  display: inline-flex;
+.pdf-slide-loading-spinner,
+.session-flow-spinner {
+  animation: session-spin 850ms linear infinite;
+  border: 3px solid rgba(91, 52, 42, 0.28);
+  border-radius: 50%;
+  border-top-color: currentColor;
+  display: inline-block;
   flex: 0 0 auto;
-  font-family: Arial, sans-serif;
-  font-size: clamp(28px, 2.6vw, 44px);
-  justify-content: center;
-  line-height: 1;
-  text-shadow: none;
-  width: clamp(38px, 3.4vw, 57px);
+  height: 18px;
+  width: 18px;
 }
 
-.session-topic:disabled {
+.pdf-slide-native-fallback {
+  background: #fdfaf4;
+  border: 0;
+  height: 100%;
+  inset: 0;
+  position: absolute;
+  width: 100%;
+  z-index: 3;
+}
+
+.topic-control-icon {
+  color: currentColor;
+  flex: 0 0 auto;
+  height: clamp(36px, 3.1vw, 52px);
+  width: clamp(36px, 3.1vw, 52px);
+}
+
+.topic-control-icon-loading {
+  animation: session-spin 850ms linear infinite;
+}
+
+.topic-spinner-track,
+.topic-spinner-head {
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-width: 3.2;
+}
+
+.topic-spinner-track {
+  opacity: 0.28;
+}
+
+.session-topic:disabled:not(.pending) {
   cursor: wait;
   filter: brightness(0.72);
+}
+
+.session-topic.pending:disabled {
+  border-color: #efb184;
+  cursor: wait;
+  filter: brightness(1.02);
+}
+
+.session-flow-status {
+  align-items: center;
+  background: rgba(28, 19, 17, 0.94);
+  border: clamp(2px, 0.16vw, 3px) solid #d99669;
+  bottom: 3.2%;
+  box-shadow:
+    0 0 0 2px rgba(17, 12, 11, 0.88),
+    0 5px 16px rgba(0, 0, 0, 0.3);
+  color: var(--cream);
+  display: flex;
+  font-family: var(--pixel-font);
+  font-size: clamp(15px, 1.16vw, 20px);
+  font-weight: 800;
+  gap: 10px;
+  left: 50%;
+  max-width: 58%;
+  padding: 0.7% 1.15%;
+  position: absolute;
+  text-shadow: 2px 2px 0 #000;
+  transform: translateX(-50%);
+  z-index: 8;
+}
+
+.session-flow-status.thinking {
+  border-color: #f0aa78;
+}
+
+.session-flow-status .session-flow-spinner {
+  border-color: rgba(255, 241, 219, 0.28);
+  border-top-color: #fff1db;
 }
 
 .session-request-error {
@@ -1186,4 +1260,10 @@ button {
   text-shadow: 2px 2px 0 #000;
   top: 8.2%;
   z-index: 50;
+}
+
+@keyframes session-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }

@@ -4,7 +4,8 @@ import {
   getPregeneratedSpeech,
 } from '../data/pregeneratedSpeech.js'
 
-const backendSpeechUrl = 'http://127.0.0.1:8000/api/tutor-speech'
+const backendBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'
+const backendSpeechUrl = `${backendBaseUrl}/api/tutor-speech`
 
 let currentAudio = null
 let finishCurrentAudio = null

@@ -184,6 +184,7 @@ def to_response(state: TeacherState) -> TeacherResponse:
         speech=state["speech"],
         avatar_state=avatar_state,
         awaiting=awaiting,
+        phase=state["mode"].value,
         outline=[
             Topic(index=i, title=t["title"], summary=t["summary"])
             for i, t in enumerate(state["outline"])

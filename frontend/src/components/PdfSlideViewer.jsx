@@ -8,39 +8,59 @@ export function PdfSlideViewer({ pdfUrl, slideNumber, topicTitle }) {
   const hostRef = useRef(null)
   const canvasRef = useRef(null)
   const [pdfDocument, setPdfDocument] = useState(null)
-  const [error, setError] = useState('')
+  const [status, setStatus] = useState(pdfUrl ? 'loading' : 'empty')
 
   useEffect(() => {
     if (!pdfUrl) {
       setPdfDocument(null)
-      setError('')
+      setStatus('empty')
       return undefined
     }
 
+    const controller = new AbortController()
     let cancelled = false
-    const loadingTask = getDocument(pdfUrl)
+    let loadingTask = null
 
-    loadingTask.promise
-      .then((document) => {
+    setPdfDocument(null)
+    setStatus('loading')
+
+    async function loadPdf() {
+      try {
+        // Read the Blob URL on the main thread and hand PDF.js the bytes.
+        // This is more reliable than asking the PDF worker to fetch a Blob URL.
+        const response = await fetch(pdfUrl, { signal: controller.signal })
+        if (!response.ok) {
+          throw new Error(`Could not read the uploaded PDF (${response.status}).`)
+        }
+
+        const bytes = await response.arrayBuffer()
         if (cancelled) {
-          document.destroy()
+          return
+        }
+
+        loadingTask = getDocument({ data: new Uint8Array(bytes) })
+        const document = await loadingTask.promise
+
+        if (cancelled) {
+          await document.destroy()
           return
         }
 
         setPdfDocument(document)
-        setError('')
-      })
-      .catch((loadError) => {
-        if (!cancelled) {
-          console.error(loadError)
-          setPdfDocument(null)
-          setError('Could not render this PDF slide.')
+      } catch (error) {
+        if (!cancelled && error?.name !== 'AbortError') {
+          console.error(error)
+          setStatus('error')
         }
-      })
+      }
+    }
+
+    loadPdf()
 
     return () => {
       cancelled = true
-      loadingTask.destroy()
+      controller.abort()
+      loadingTask?.destroy()
     }
   }, [pdfUrl])
 
@@ -52,25 +72,27 @@ export function PdfSlideViewer({ pdfUrl, slideNumber, topicTitle }) {
     let cancelled = false
     let animationFrame = null
     let renderTask = null
+    let renderedPage = null
 
     async function renderSlide() {
       if (cancelled || !hostRef.current || !canvasRef.current) {
         return
       }
 
-      if (renderTask) {
-        renderTask.cancel()
-        renderTask = null
-      }
+      renderTask?.cancel()
+      renderTask = null
 
       try {
+        setStatus('loading')
+
         const pageNumber = Math.min(
           Math.max(Number(slideNumber) || 1, 1),
           pdfDocument.numPages,
         )
         const page = await pdfDocument.getPage(pageNumber)
+        renderedPage = page
 
-        if (cancelled) {
+        if (cancelled || !hostRef.current || !canvasRef.current) {
           return
         }
 
@@ -84,7 +106,7 @@ export function PdfSlideViewer({ pdfUrl, slideNumber, topicTitle }) {
           availableHeight / baseViewport.height,
         )
         const viewport = page.getViewport({ scale: Math.max(scale, 0.1) })
-        const pixelRatio = window.devicePixelRatio || 1
+        const pixelRatio = Math.min(window.devicePixelRatio || 1, 2)
         const context = canvas.getContext('2d', { alpha: false })
 
         canvas.width = Math.max(1, Math.floor(viewport.width * pixelRatio))
@@ -104,14 +126,17 @@ export function PdfSlideViewer({ pdfUrl, slideNumber, topicTitle }) {
 
         await renderTask.promise
         renderTask = null
-        setError('')
-      } catch (renderError) {
+
+        if (!cancelled) {
+          setStatus('ready')
+        }
+      } catch (error) {
         if (
           !cancelled &&
-          renderError?.name !== 'RenderingCancelledException'
+          error?.name !== 'RenderingCancelledException'
         ) {
-          console.error(renderError)
-          setError('Could not render this PDF slide.')
+          console.error(error)
+          setStatus('error')
         }
       }
     }
@@ -120,27 +145,35 @@ export function PdfSlideViewer({ pdfUrl, slideNumber, topicTitle }) {
       if (animationFrame !== null) {
         cancelAnimationFrame(animationFrame)
       }
-
       animationFrame = requestAnimationFrame(renderSlide)
     }
 
-    const observer = new ResizeObserver(scheduleRender)
-    observer.observe(hostRef.current)
+    let observer = null
+    if (typeof ResizeObserver !== 'undefined') {
+      observer = new ResizeObserver(scheduleRender)
+      observer.observe(hostRef.current)
+    }
+
     scheduleRender()
 
     return () => {
       cancelled = true
-      observer.disconnect()
+      observer?.disconnect()
 
       if (animationFrame !== null) {
         cancelAnimationFrame(animationFrame)
       }
 
-      if (renderTask) {
-        renderTask.cancel()
-      }
+      renderTask?.cancel()
+      renderedPage?.cleanup()
     }
   }, [pdfDocument, slideNumber])
+
+  useEffect(() => {
+    return () => {
+      pdfDocument?.destroy()
+    }
+  }, [pdfDocument])
 
   if (!pdfUrl) {
     return (
@@ -151,6 +184,9 @@ export function PdfSlideViewer({ pdfUrl, slideNumber, topicTitle }) {
     )
   }
 
+  const page = Math.max(Number(slideNumber) || 1, 1)
+  const nativeFallbackUrl = `${pdfUrl}#page=${page}&zoom=page-fit&toolbar=0&navpanes=0&scrollbar=0`
+
   return (
     <div
       className="pdf-slide-canvas-wrap"
@@ -159,7 +195,24 @@ export function PdfSlideViewer({ pdfUrl, slideNumber, topicTitle }) {
       aria-label={`Slide ${slideNumber}${topicTitle ? `: ${topicTitle}` : ''}`}
     >
       <canvas className="pdf-slide-canvas" ref={canvasRef} />
-      {error && <span className="pdf-slide-error">{error}</span>}
+
+      {status === 'loading' && (
+        <div className="pdf-slide-loading" role="status">
+          <span className="pdf-slide-loading-spinner" aria-hidden="true" />
+          <span>Loading slide…</span>
+        </div>
+      )}
+
+      {status === 'error' && (
+        <object
+          className="pdf-slide-native-fallback"
+          data={nativeFallbackUrl}
+          type="application/pdf"
+          aria-label={`Slide ${slideNumber} fallback viewer`}
+        >
+          <span className="pdf-slide-error">Could not render this PDF slide.</span>
+        </object>
+      )}
     </div>
   )
 }

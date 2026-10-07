@@ -231,6 +231,7 @@ def make_plan_node(llm: LLM):
 
     def plan(state: TeacherState) -> dict:
         outline = plan_lecture(llm, state["lecture"])
+        intro = intro_speech(state["lecture"], outline)
         return {
             "outline": outline,
             "current_topic": None,
@@ -239,7 +240,8 @@ def make_plan_node(llm: LLM):
             "segment_index": 0,
             "question_points": [],
             "completed_topics": [],
-            "speech": [intro_speech(state["lecture"], outline)],
+            "speech": [intro],
+            "history": [{"role": "teacher", "text": intro}],
             "mode": Mode.INTRO,
         }
 

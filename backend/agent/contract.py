@@ -166,6 +166,7 @@ class TeacherResponse(_Model):
     speech: list[str]
     avatar_state: AvatarState
     awaiting: Awaiting
+    phase: str = ""
     outline: list[Topic]
     current_topic: int | None = None  # None before planning or after the end
     current_slide: int | None = None  # The PDF slide/page currently being explained

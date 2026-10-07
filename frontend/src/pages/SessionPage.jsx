@@ -11,6 +11,22 @@ function logSpeechError(error) {
   }
 }
 
+function statusForAutomaticContinue(phase) {
+  if (phase === 'explaining') return 'Preparing a question…'
+  if (phase === 'answering_student') return 'Returning to where we left off…'
+  if (phase === 'feedback') return 'Continuing the lesson…'
+  if (phase === 'summarizing') return 'Returning to the lesson…'
+  if (phase === 'intro') return 'Getting the session ready…'
+  return 'Thinking…'
+}
+
+function statusForCurrentPhase(phase) {
+  if (phase === 'awaiting_answer') return 'Question time'
+  if (phase === 'awaiting_student_question') return 'Ask your question'
+  if (phase === 'answering_student') return 'Answering your question'
+  return ''
+}
+
 export function SessionPage({
   environment,
   initialTeacherResponse,
@@ -20,6 +36,7 @@ export function SessionPage({
   const [teacherResponse, setTeacherResponse] = useState(initialTeacherResponse)
   const [isPending, setIsPending] = useState(false)
   const [requestError, setRequestError] = useState('')
+  const [pendingAction, setPendingAction] = useState(null)
   const [subtitle, setSubtitle] = useState('')
   const playingSegment = useRef(0)
   const actionToken = useRef(0)
@@ -41,6 +58,8 @@ export function SessionPage({
   const introIsPlaying =
     teacherResponse.current_topic === null &&
     teacherResponse.awaiting === 'continue'
+  const stageStatus =
+    pendingAction?.label || statusForCurrentPhase(teacherResponse.phase)
 
   useEffect(() => {
     const requests = eventRequests.current
@@ -73,6 +92,10 @@ export function SessionPage({
     eventRequests.current.add(controller)
     setRequestError('')
     setIsPending(true)
+    setPendingAction({
+      label: options.status || 'Thinking…',
+      topicIndex: options.topicIndex ?? null,
+    })
 
     if (options.playThinking) {
       playThinkingSpeech(environment.id).catch(logSpeechError)
@@ -98,6 +121,7 @@ export function SessionPage({
 
       if (token === actionToken.current) {
         setIsPending(false)
+        setPendingAction(null)
       }
     }
   }, [
@@ -118,7 +142,13 @@ export function SessionPage({
           token === actionToken.current &&
           teacherResponse.awaiting === 'continue'
         ) {
-          return sendEvent({ type: 'continue' })
+          return sendEvent(
+            { type: 'continue' },
+            {
+              status: statusForAutomaticContinue(teacherResponse.phase),
+              topicIndex: teacherResponse.current_topic,
+            },
+          )
         }
 
         return null
@@ -136,12 +166,19 @@ export function SessionPage({
       return
     }
 
+    const topic = teacherResponse.outline.find((item) => item.index === topicIndex)
     const isCompleted = teacherResponse.completed_topics.includes(topicIndex)
     const type = isCompleted ? 'repeat' : 'go_to_topic'
+    const topicName = topic?.title || 'this topic'
 
     sendEvent(
       { type, topic_index: topicIndex },
-      { playThinking: true },
+      {
+        status: isCompleted
+          ? `Preparing a fresh explanation of ${topicName}…`
+          : `Preparing ${topicName}…`,
+        topicIndex,
+      },
     )
   }
 
@@ -150,7 +187,13 @@ export function SessionPage({
       return
     }
 
-    sendEvent({ type: 'raise_hand', segment_index: playingSegment.current })
+    sendEvent(
+      { type: 'raise_hand', segment_index: playingSegment.current },
+      {
+        status: 'Pausing the lesson…',
+        topicIndex: teacherResponse.current_topic,
+      },
+    )
   }
 
   function sendMessage(text) {
@@ -158,8 +201,18 @@ export function SessionPage({
       return
     }
 
-    const eventType = teacherResponse.awaiting === 'answer' ? 'answer' : 'question'
-    sendEvent({ type: eventType, text }, { playThinking: true })
+    const isAnswer = teacherResponse.awaiting === 'answer'
+    const eventType = isAnswer ? 'answer' : 'question'
+    sendEvent(
+      { type: eventType, text },
+      {
+        playThinking: true,
+        status: isAnswer
+          ? 'Checking your answer…'
+          : 'Thinking about your question…',
+        topicIndex: teacherResponse.current_topic,
+      },
+    )
   }
 
   return (
@@ -205,6 +258,17 @@ export function SessionPage({
           data-posture={avatarPosture}
         />
 
+        {stageStatus && (
+          <div
+            className={isPending ? 'session-flow-status thinking' : 'session-flow-status'}
+            role="status"
+            aria-live="polite"
+          >
+            {isPending && <span className="session-flow-spinner" aria-hidden="true" />}
+            <span>{stageStatus}</span>
+          </div>
+        )}
+
         {subtitle && !isPending && (
           // key: each new subtitle is a new element, so it pops in like the panels.
           <p key={subtitle} className="session-subtitles">
@@ -219,6 +283,7 @@ export function SessionPage({
         disabled={isPending || introIsPlaying}
         onSelectTopic={chooseTopic}
         outline={teacherResponse.outline}
+        pendingTopic={pendingAction?.topicIndex ?? null}
       />
 
       <MessageBar

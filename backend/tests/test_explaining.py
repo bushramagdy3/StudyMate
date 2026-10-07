@@ -103,17 +103,18 @@ def test_fit_segments_merges_extras_and_drops_blanks():
     assert fit_segments(["a", "b"], 3) == ["a", "b"]
 
 
-def test_prompt_uses_personality_slides_and_greeting():
+def test_prompt_uses_personality_and_slides_without_a_second_introduction():
     llm, sent = fake_llm(["one", "two", "three", "four"])
     generate_segments(llm, make_state())
 
     system, user = sent[0]["messages"][0]["content"], sent[0]["messages"][1]["content"]
     assert "Professor Regina" in system
     assert "Slide 2:\nHTTP/1.1 pipelining" in user
-    assert "Head-of-line" not in user  # only this topic's slides
-    assert "greeting the student" in user
-    assert "exactly 4 segments" in user  # professor's segments_per_topic
-    assert "exactly 2 segment number(s) between 1 and 4" in user  # professor's 2 questions
+    assert "Head-of-line" not in user
+    assert "Do not greet the student or introduce yourself again" in user
+    assert "This is the very start of the lecture" not in user
+    assert "exactly 4 segments" in user
+    assert "exactly 2 segment number(s) between 1 and 4" in user
 
 
 def test_later_topics_connect_to_covered_ones_without_greeting():

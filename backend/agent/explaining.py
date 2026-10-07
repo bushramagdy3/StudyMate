@@ -97,12 +97,11 @@ def explain_prompt(state: TeacherState, previous: list[str] | None = None) -> st
         "",
     ]
 
-    if not state["history"] and previous is None:
-        lines.append(
-            "This is the very start of the lecture: begin the first segment by greeting "
-            "the student, introducing yourself by name, and saying what today's lecture is about."
-        )
-    elif covered:
+    lines.append(
+        "The session introduction has already happened. Start teaching this topic directly. "
+        "Do not greet the student or introduce yourself again."
+    )
+    if covered:
         lines.append(
             f"Already covered: {', '.join(covered)}. Don't re-teach these, but you can "
             "briefly connect to the previous topic."
