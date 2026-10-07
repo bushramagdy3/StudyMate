@@ -49,8 +49,9 @@ export function splitIntoSubtitles(text) {
 }
 
 /**
- * Calls showChunk(chunkText) as the audio progresses: each chunk is shown for
- * its share of the clip, by length (longer chunks take longer to say).
+ * Subtitles for one audio clip. Nothing is shown until the clip actually starts
+ * playing (onPlaying); then showChunk(chunkText) is called as the audio
+ * progresses, each chunk shown for its share of the clip by length.
  */
 function followAudioWithSubtitles(text, showChunk) {
   const chunks = splitIntoSubtitles(text)
@@ -71,11 +72,24 @@ function followAudioWithSubtitles(text, showChunk) {
     }
   }
 
-  show(0)
+  let playing = false
 
-  return (fraction) => {
-    const index = ends.findIndex((end) => fraction < end)
-    show(index === -1 ? chunks.length - 1 : index)
+  return {
+    onPlaying() {
+      playing = true
+
+      if (shown === -1) {
+        show(0)
+      }
+    },
+    onProgress(fraction) {
+      if (!playing) {
+        return
+      }
+
+      const index = ends.findIndex((end) => fraction < end)
+      show(index === -1 ? chunks.length - 1 : index)
+    },
   }
 }
 
@@ -101,17 +115,20 @@ export function stopSpeech() {
   stopAudio()
 }
 
-function playAudioUrl(audioUrl, shouldRevoke = false, onProgress = null) {
+function playAudioUrl(audioUrl, shouldRevoke = false, subtitles = null) {
   stopAudio()
 
   return new Promise((resolve, reject) => {
     const audio = new Audio(audioUrl)
     currentAudio = audio
 
-    if (onProgress) {
+    if (subtitles) {
+      // "playing" fires when sound actually starts (after loading and decoding),
+      // so the subtitle never appears before Regina starts speaking.
+      audio.onplaying = () => subtitles.onPlaying()
       audio.ontimeupdate = () => {
         if (Number.isFinite(audio.duration) && audio.duration > 0) {
-          onProgress(audio.currentTime / audio.duration)
+          subtitles.onProgress(audio.currentTime / audio.duration)
         }
       }
     }
@@ -183,12 +200,16 @@ function prefetchSpeechAudio(text) {
  *
  * onSegment(index, subtitle) is called whenever the subtitle changes: index is
  * the segment being spoken (used for raise hand), subtitle is the 1-2 sentences
- * of it being said right now.
+ * of it being said right now. It's first called with (0, '') to hide the old
+ * subtitle while the new audio loads.
  */
 export async function playSpeech(speech, environmentId, onSegment = () => {}) {
   stopSpeech()
   const sequence = speechSequence
   const segments = (Array.isArray(speech) ? speech : [speech]).filter(Boolean)
+
+  // Hide the previous subtitle until this speech's audio starts playing.
+  onSegment(0, '')
 
   if (segments.length === 0) {
     return
@@ -199,8 +220,8 @@ export async function playSpeech(speech, environmentId, onSegment = () => {}) {
   const pregenerated = getPregeneratedSpeechByText(environmentId, fullText)
 
   if (pregenerated) {
-    const progress = followAudioWithSubtitles(fullText, (subtitle) => onSegment(0, subtitle))
-    await playAudioUrl(getPregeneratedSpeechUrl(environmentId, pregenerated), false, progress)
+    const subtitles = followAudioWithSubtitles(fullText, (subtitle) => onSegment(0, subtitle))
+    await playAudioUrl(getPregeneratedSpeechUrl(environmentId, pregenerated), false, subtitles)
     return
   }
 
@@ -217,8 +238,8 @@ export async function playSpeech(speech, environmentId, onSegment = () => {}) {
     }
 
     nextAudio = index + 1 < segments.length ? prefetchSpeechAudio(segments[index + 1]) : null
-    const progress = followAudioWithSubtitles(segments[index], (subtitle) => onSegment(index, subtitle))
-    await playAudioUrl(audioUrl, true, progress)
+    const subtitles = followAudioWithSubtitles(segments[index], (subtitle) => onSegment(index, subtitle))
+    await playAudioUrl(audioUrl, true, subtitles)
 
     if (sequence !== speechSequence) {
       return
