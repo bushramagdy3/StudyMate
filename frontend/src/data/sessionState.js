@@ -1,7 +1,7 @@
 export const sessionState = {
   session_id: 'temporary-session',
   speech: [
-    "Let's start with the first topic and connect it to the lecture slides.",
+    "Hello! I'm Regina, your teacher. Let's get started.",
   ],
   avatar_state: 'speaking',
   awaiting: 'continue',
@@ -34,4 +34,6 @@ export const sessionState = {
   ],
   current_topic: 0,
   completed_topics: [],
+  can_raise_hand: true,
+  summary_available: false,
 }

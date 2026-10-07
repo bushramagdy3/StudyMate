@@ -8,10 +8,14 @@ const placeholders = {
   question: 'Type your question...',
 }
 
-export function MessageBar({ awaiting, onRaiseHand, onSendMessage }) {
+export function MessageBar({
+  awaiting,
+  canRaiseHand = false,
+  onRaiseHand,
+  onSendMessage,
+}) {
   const [message, setMessage] = useState('')
   const canSend = ['answer', 'question'].includes(awaiting) && Boolean(message.trim())
-  const canRaiseHand = awaiting === 'continue'
   const isHandRaised = awaiting === 'question'
 
   function sendMessage() {

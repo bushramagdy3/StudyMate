@@ -1,43 +1,27 @@
 import { useEffect, useState } from 'react'
 import { MessageBar } from '../components/MessageBar.jsx'
 import { SessionOutline } from '../components/SessionOutline.jsx'
+import { getPregeneratedSpeech } from '../data/pregeneratedSpeech.js'
 import { sessionState } from '../data/sessionState.js'
+import { playSpeech } from '../utils/speechAudio.js'
 
-async function playTutorSpeech(text) {
-  const speechText = Array.isArray(text)
-    ? text.join(' ')
-    : text
-
-  if (!speechText) return
-
-  const response = await fetch("http://127.0.0.1:8000/api/tutor-speech", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      text: speechText
-    })
-  })
-
-  if (!response.ok) {
-    throw new Error("Could not generate tutor speech")
+function logSpeechError(error) {
+  if (error?.name !== 'AbortError') {
+    console.error(error)
   }
+}
 
-  const audioBlob = await response.blob()
-  const audioUrl = URL.createObjectURL(audioBlob)
-
-  const audio = new Audio(audioUrl)
-
-  audio.onended = () => {
-    URL.revokeObjectURL(audioUrl)
+function makeInitialTeacherResponse(environmentId) {
+  return {
+    ...sessionState,
+    speech: [getPregeneratedSpeech(environmentId, 'welcome').text],
   }
-
-  await audio.play()
 }
 
 export function SessionPage({ environment }) {
-  const [teacherResponse, setTeacherResponse] = useState(sessionState)
+  const [teacherResponse, setTeacherResponse] = useState(() =>
+    makeInitialTeacherResponse(environment.id),
+  )
 
   const avatarPosture = teacherResponse.avatar_state || 'idle'
 
@@ -50,28 +34,16 @@ export function SessionPage({ environment }) {
     (topic) => topic.index === teacherResponse.current_topic,
   )
 
-  const [currentSpeech, setCurrentSpeech] = useState(
-    "Hello! I'm Regina, your Teacher."
-  )
-
   useEffect(() => {
-    if (currentSpeech !== "Hello! I'm Regina, your Teacher.") {
-      playTutorSpeech(currentSpeech).catch(console.error)
-    }
-  }, [currentSpeech])
-
-  useEffect(() => {
-    async function temp(){
-        setCurrentSpeech(teacherResponse.speech)
-    }
-    temp();
-  }, [teacherResponse.speech])
+    playSpeech(teacherResponse.speech, environment.id).catch(logSpeechError)
+  }, [environment.id, teacherResponse.speech])
 
   function chooseTopic(topicIndex) {
     setTeacherResponse((response) => ({
       ...response,
       avatar_state: 'speaking',
       awaiting: 'continue',
+      can_raise_hand: true,
       current_topic: topicIndex,
       speech: [
         `Let's move to ${response.outline[topicIndex]?.title || 'this topic'}.`,
@@ -84,42 +56,59 @@ export function SessionPage({ environment }) {
       ...response,
       avatar_state: 'listening',
       awaiting: 'question',
-      speech: ['What would you like to ask?'],
+      can_raise_hand: false,
+      speech: [getPregeneratedSpeech(environment.id, 'handRaisePrompt').text],
     }))
   }
 
   function sendMessage(text) {
+    const submittedAwaiting = teacherResponse.awaiting
+
     setTeacherResponse((response) => {
-      const topic =
-        response.outline.find(
-          (item) => item.index === response.current_topic
-        ) ||
-        response.outline[0]
-
-      if (response.awaiting === 'answer') {
-        return {
-          ...response,
-          avatar_state: 'speaking',
-          awaiting: 'continue',
-          speech: [
-            `Thanks for answering. We will use that to continue ${topic.title}.`,
-          ],
-        }
+      return {
+        ...response,
+        avatar_state: 'thinking',
+        awaiting: 'nothing',
+        can_raise_hand: false,
+        speech: [getPregeneratedSpeech(environment.id, 'thinking').text],
       }
-
-      if (response.awaiting === 'question') {
-        return {
-          ...response,
-          avatar_state: 'speaking',
-          awaiting: 'continue',
-          speech: [
-            `Good question. Here is a short explanation connected to ${topic.title}: ${text}`,
-          ],
-        }
-      }
-
-      return response
     })
+
+    window.setTimeout(() => {
+      setTeacherResponse((response) => {
+        const topic =
+          response.outline.find(
+            (item) => item.index === response.current_topic
+          ) ||
+          response.outline[0]
+
+        if (submittedAwaiting === 'answer') {
+          return {
+            ...response,
+            avatar_state: 'speaking',
+            awaiting: 'continue',
+            can_raise_hand: true,
+            speech: [
+              `Thanks for answering. We will use that to continue ${topic.title}.`,
+            ],
+          }
+        }
+
+        if (submittedAwaiting === 'question') {
+          return {
+            ...response,
+            avatar_state: 'speaking',
+            awaiting: 'continue',
+            can_raise_hand: true,
+            speech: [
+              `Good question. Here is a short explanation connected to ${topic.title}: ${text}`,
+            ],
+          }
+        }
+
+        return response
+      })
+    }, 1200)
   }
 
   return (
@@ -163,6 +152,7 @@ export function SessionPage({ environment }) {
 
       <MessageBar
         awaiting={teacherResponse.awaiting}
+        canRaiseHand={teacherResponse.can_raise_hand}
         onRaiseHand={raiseHand}
         onSendMessage={sendMessage}
       />
