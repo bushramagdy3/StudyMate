@@ -29,6 +29,8 @@ MAX_ATTEMPTS = 2
 class Mode(str, Enum):
     """What the agent is waiting for while it is paused."""
 
+    INTRO = "intro"  # opening/title-slide moment is playing
+    WAITING_TOPIC = "waiting_topic"  # intro or a topic finished; waiting for outline click
     EXPLAINING = "explaining"  # an explanation part is playing; continue -> ask a question
     FEEDBACK = "feedback"  # praise or the revealed answer is playing; continue -> lecture goes on
     AWAITING_ANSWER = "awaiting_answer"  # asked a question; waiting for the student's answer
@@ -81,6 +83,7 @@ class TeacherState(TypedDict):
 
     # --- where we are in the lecture ---
     current_topic: int | None  # None until the outline exists, and after the end
+    current_slide: int | None
     segments: list[str]  # the current topic's explanation, split into short parts
     segment_index: int  # next segment to say; on raise_hand, the one to resume from
     question_points: list[int]  # ask a question after these segment numbers, e.g. [2, 4]
@@ -113,6 +116,7 @@ def initial_state(session_id: str, request: StartSessionRequest) -> TeacherState
         "lecture": request.lecture,
         "outline": [],
         "current_topic": None,
+        "current_slide": request.lecture[0].slide if request.lecture else None,
         "segments": [],
         "segment_index": 0,
         "question_points": [],
@@ -150,6 +154,8 @@ def feedback_kind(correct: bool, attempts: int) -> FeedbackKind:
 
 # How each mode looks to the frontend: (avatar_state, awaiting).
 _MODE_TO_UI = {
+    Mode.INTRO: (AvatarState.SPEAKING, Awaiting.CONTINUE),
+    Mode.WAITING_TOPIC: (AvatarState.IDLE, Awaiting.NOTHING),
     Mode.EXPLAINING: (AvatarState.SPEAKING, Awaiting.CONTINUE),
     Mode.FEEDBACK: (AvatarState.SPEAKING, Awaiting.CONTINUE),
     Mode.ANSWERING_STUDENT: (AvatarState.SPEAKING, Awaiting.CONTINUE),
@@ -163,11 +169,15 @@ _MODE_TO_UI = {
 def to_response(state: TeacherState) -> TeacherResponse:
     """Turn the internal state into the TeacherResponse the frontend gets."""
     avatar_state, awaiting = _MODE_TO_UI[state["mode"]]
-    current_slide = None
-    if state["current_topic"] is not None and state["outline"]:
-        source_slides = state["outline"][state["current_topic"]]["source_slides"]
-        if source_slides:
-            current_slide = source_slides[0]
+    started_topics = sorted(
+        set(state["completed_topics"])
+        | set(state["topic_progress"])
+        | (
+            {state["current_topic"]}
+            if state["current_topic"] is not None and state["segments"]
+            else set()
+        )
+    )
 
     return TeacherResponse(
         session_id=state["session_id"],
@@ -179,8 +189,9 @@ def to_response(state: TeacherState) -> TeacherResponse:
             for i, t in enumerate(state["outline"])
         ],
         current_topic=state["current_topic"],
-        current_slide=current_slide,
+        current_slide=state["current_slide"],
         completed_topics=state["completed_topics"],
+        started_topics=started_topics,
         can_raise_hand=state["mode"] == Mode.EXPLAINING,
         summary_available=get_personality(state["environment"]).offers_summary
         and state["mode"] != Mode.ENDED,

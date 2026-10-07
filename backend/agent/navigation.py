@@ -12,10 +12,10 @@ Ending the session is handled by Teacher.end_session(): it deletes everything.
 "continue" is not a button: the frontend sends it automatically when the
 speech has finished playing. Where it leads, by what was just said:
     EXPLAINING         -> ask a question about that part
-    FEEDBACK           -> next part of the topic, or the next topic
+    FEEDBACK           -> next part of the topic, or wait at the outline
     ANSWERING_STUDENT  -> back to the explanation, from the interrupted segment
     SUMMARIZING        -> back to where the student was (see summary.py)
-After the last topic, Regina says a short goodbye, naming topics to review.
+After a topic finishes, Regina waits for the student to choose another topic.
 
 Each action has a check (can the student do it right now?). Step 11 rejects
 an action when its check says no.
@@ -75,6 +75,8 @@ def choose_topic_to_repeat(state: TeacherState, topic_index: int) -> dict:
         "current_topic": topic_index,
         "topic_progress": progress,
         "segments": progress.get(topic_index, {}).get("segments", []),
+        "pending_question": None,
+        "attempts": 0,
     }
 
 
@@ -87,7 +89,16 @@ def make_repeat_node(llm: LLM):
 
     def repeat(state: TeacherState) -> dict:
         segments, points = generate_segments(llm, state, previous=state["segments"])
-        return {"pending_question": None, "attempts": 0, **say_part(segments, points, 0)}
+        return {
+            "pending_question": None,
+            "attempts": 0,
+            **say_part(
+                segments,
+                points,
+                0,
+                state["outline"][state["current_topic"]]["source_slides"],
+            ),
+        }
 
     return repeat
 
@@ -96,7 +107,13 @@ def make_repeat_node(llm: LLM):
 # Continue (the current speech finished playing)
 # ---------------------------------------------------------------------------
 
-CONTINUABLE = {Mode.EXPLAINING, Mode.FEEDBACK, Mode.ANSWERING_STUDENT, Mode.SUMMARIZING}
+CONTINUABLE = {
+    Mode.INTRO,
+    Mode.EXPLAINING,
+    Mode.FEEDBACK,
+    Mode.ANSWERING_STUDENT,
+    Mode.SUMMARIZING,
+}
 
 
 def can_continue(state: TeacherState) -> bool:
@@ -114,6 +131,8 @@ def continue_lecture(state: TeacherState) -> dict:
 
 def after_continue(state: TeacherState) -> str:
     """Which node runs after continue_lecture: 'ask_question', 'explain' or 'next_topic'."""
+    if state["mode"] == Mode.INTRO:
+        return "finish_intro"
     if state["mode"] == Mode.EXPLAINING:
         return "ask_question"
     if state["mode"] == Mode.FEEDBACK and topic_finished(state):
@@ -122,8 +141,20 @@ def after_continue(state: TeacherState) -> str:
 
 
 def after_next_topic(state: TeacherState) -> str:
-    """After a topic is done: the next topic (explained or resumed), or the goodbye."""
-    return after_entering_topic(state)
+    """After a topic is done, wait for the student to choose from the outline."""
+    return "wait"
+
+
+def finish_intro(state: TeacherState) -> dict:
+    return {
+        "speech": [],
+        "mode": Mode.WAITING_TOPIC,
+        "current_topic": None,
+        "segments": [],
+        "segment_index": 0,
+        "question_points": [],
+        "pending_question": None,
+    }
 
 
 # ---------------------------------------------------------------------------

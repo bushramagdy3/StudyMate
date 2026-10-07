@@ -126,6 +126,9 @@ def explain_prompt(state: TeacherState, previous: list[str] | None = None) -> st
         "",
         f"Write the explanation as exactly {count} segments, in teaching order.",
         "Each segment is 2 to 4 spoken sentences about one small idea.",
+        "Teach clearly: define new terms before using them, then explain the idea step by step.",
+        "When a slide contains a diagram, table, equation, chart, or visual example, explicitly explain what it shows and how it supports the concept.",
+        "If the slide has labels, axes, arrows, rows, columns, formulas, or examples, refer to their meaning rather than vaguely saying 'the visual'.",
         "Don't ask the student questions; questions come separately.",
         "",
         f"Also choose where to pause and ask the student a question: in question_after, list "
@@ -194,13 +197,42 @@ def make_explain_node(llm: LLM):
     def explain(state: TeacherState) -> dict:
         if not state["segments"]:
             segments, points = generate_segments(llm, state)
-            return say_part(segments, points, 0)
-        return say_part(state["segments"], state["question_points"], state["segment_index"])
+            return say_part(
+                segments,
+                points,
+                0,
+                state["outline"][state["current_topic"]]["source_slides"],
+            )
+        return say_part(
+            state["segments"],
+            state["question_points"],
+            state["segment_index"],
+            state["outline"][state["current_topic"]]["source_slides"],
+        )
 
     return explain
 
 
-def say_part(segments: list[str], points: list[int], segment_index: int) -> dict:
+def slide_for_segment(segments: list[str], segment_index: int, slide_numbers: list[int] | None) -> int | None:
+    if not slide_numbers:
+        return None
+    if not segments:
+        return slide_numbers[0]
+
+    safe_index = max(0, min(segment_index, len(segments) - 1))
+    slide_index = min(
+        int(safe_index * len(slide_numbers) / len(segments)),
+        len(slide_numbers) - 1,
+    )
+    return slide_numbers[slide_index]
+
+
+def say_part(
+    segments: list[str],
+    points: list[int],
+    segment_index: int,
+    slide_numbers: list[int] | None = None,
+) -> dict:
     """State update that says the part of the explanation starting at segment_index."""
     segment_index = min(segment_index, len(segments) - 1)
     speech = segments[segment_index : next_stop(segment_index, points, len(segments))]
@@ -208,6 +240,7 @@ def say_part(segments: list[str], points: list[int], segment_index: int) -> dict
         "segments": segments,
         "question_points": points,
         "segment_index": segment_index,
+        "current_slide": slide_for_segment(segments, segment_index, slide_numbers),
         "speech": speech,
         "mode": Mode.EXPLAINING,
         "history": [{"role": "teacher", "text": " ".join(speech)}],
@@ -265,4 +298,9 @@ def enter_topic(state: TeacherState, topic: int, progress: dict, restart_current
     finished = topic in state["completed_topics"] or start >= len(saved["segments"])
     if finished or (restart_current and topic == state["current_topic"]):
         start = 0
-    return update | say_part(saved["segments"], saved["question_points"], start)
+    return update | say_part(
+        saved["segments"],
+        saved["question_points"],
+        start,
+        state["outline"][topic]["source_slides"],
+    )

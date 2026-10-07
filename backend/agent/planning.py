@@ -83,6 +83,36 @@ Rules:
 - Key points must come from the slides. Do not add information that isn't in them."""
 
 
+def lecture_title(lecture: list[LectureChunk]) -> str:
+    if not lecture:
+        return "today's lecture"
+
+    first_slide = lecture[0].text.strip()
+    for line in first_slide.splitlines():
+        clean = line.strip(" -:\t")
+        if 4 <= len(clean) <= 90:
+            return clean
+
+    return "today's lecture"
+
+
+def intro_speech(lecture: list[LectureChunk], outline: list[OutlineTopic]) -> str:
+    title = lecture_title(lecture)
+    topic_names = [topic["title"] for topic in outline[:3]]
+
+    if topic_names:
+        return (
+            f"Welcome. Before we start, this lecture is about {title}. "
+            f"I planned it into topics like {', '.join(topic_names)}. "
+            "Choose a topic from the outline when you are ready, and I will teach it step by step."
+        )
+
+    return (
+        f"Welcome. Before we start, this lecture is about {title}. "
+        "Choose a topic from the outline when you are ready, and I will teach it step by step."
+    )
+
+
 def plan_lecture(llm: LLM, lecture: list[LectureChunk]) -> list[OutlineTopic]:
     """Create the outline. Falls back to a simple slide-based outline if the LLM fails."""
     try:
@@ -203,12 +233,14 @@ def make_plan_node(llm: LLM):
         outline = plan_lecture(llm, state["lecture"])
         return {
             "outline": outline,
-            "current_topic": 0,
+            "current_topic": None,
+            "current_slide": state["lecture"][0].slide if state["lecture"] else None,
             "segments": [],
             "segment_index": 0,
             "question_points": [],
             "completed_topics": [],
-            "mode": Mode.EXPLAINING,
+            "speech": [intro_speech(state["lecture"], outline)],
+            "mode": Mode.INTRO,
         }
 
     return plan

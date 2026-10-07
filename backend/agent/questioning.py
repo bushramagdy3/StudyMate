@@ -221,17 +221,18 @@ def topic_finished(state: TeacherState) -> bool:
 
 
 def next_topic(state: TeacherState) -> dict:
-    """The 'next_topic' node: marks the topic done and moves on.
-
-    Goes to the first topic not finished yet (resuming it if it was left
-    halfway), so replaying an old topic brings the student back to where they
-    were. current_topic becomes None when every topic is done: the lecture is over.
-    """
+    """The 'next_topic' node: marks the topic done and waits at the outline."""
     completed = sorted(set(state["completed_topics"]) | {state["current_topic"]})
     progress = save_progress(state)
-    remaining = [i for i in range(len(state["outline"])) if i not in completed]
-    if not remaining:
-        return {"completed_topics": completed, "current_topic": None, "topic_progress": progress}
-    return {"completed_topics": completed} | enter_topic(
-        state | {"completed_topics": completed}, remaining[0], progress
-    )
+    return {
+        "completed_topics": completed,
+        "current_topic": None,
+        "topic_progress": progress,
+        "segments": [],
+        "segment_index": 0,
+        "question_points": [],
+        "pending_question": None,
+        "attempts": 0,
+        "speech": [],
+        "mode": Mode.WAITING_TOPIC,
+    }

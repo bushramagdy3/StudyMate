@@ -170,6 +170,7 @@ class TeacherResponse(_Model):
     current_topic: int | None = None  # None before planning or after the end
     current_slide: int | None = None  # The PDF slide/page currently being explained
     completed_topics: list[int] = Field(default_factory=list)
+    started_topics: list[int] = Field(default_factory=list)
     # Only true while the teacher is explaining: show the raise-hand button then.
     can_raise_hand: bool = False
     # Show "Summary" at the top of the outline (only the private tutor has it).
