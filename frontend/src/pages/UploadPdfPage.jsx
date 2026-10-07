@@ -10,6 +10,7 @@ import panelFrame from '../assets/upload-pdf-page/box1.png'
 import { Screen } from '../components/Screen.jsx'
 
 export function UploadPdfPage({
+  onPdfFileChange,
   pdfName,
   onPdfNameChange,
   onBack,
@@ -33,6 +34,7 @@ export function UploadPdfPage({
     }
 
     setError('')
+    onPdfFileChange(file)
     onPdfNameChange(file.name)
   }
 
@@ -49,6 +51,7 @@ export function UploadPdfPage({
   }
 
   function removeFile() {
+    onPdfFileChange(null)
     onPdfNameChange('')
     setError('')
 

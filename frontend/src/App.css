@@ -650,9 +650,46 @@ button {
 }
 
 .pdf-slide-slot {
-  background: transparent;
+  align-items: center;
+  background: #fdfaf4;
+  display: flex;
+  justify-content: center;
+  overflow: hidden;
   position: absolute;
   z-index: 2;
+}
+
+.pdf-slide-frame {
+  background: #fdfaf4;
+  border: 0;
+  display: block;
+  height: 100%;
+  width: 100%;
+}
+
+.pdf-slide-empty {
+  align-items: center;
+  color: #26272d;
+  display: flex;
+  flex-direction: column;
+  font-family: Arial, sans-serif;
+  height: 100%;
+  justify-content: center;
+  line-height: 1.2;
+  padding: 6%;
+  text-align: center;
+  text-shadow: none;
+  width: 100%;
+}
+
+.pdf-slide-empty strong {
+  font-size: clamp(17px, 2vw, 31px);
+  margin-bottom: 1.5%;
+}
+
+.pdf-slide-empty span {
+  color: #6e727b;
+  font-size: clamp(12px, 1.3vw, 20px);
 }
 
 .lecture-hall .session-avatar {

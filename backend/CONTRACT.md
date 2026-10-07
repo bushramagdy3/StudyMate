@@ -68,6 +68,7 @@ Events sent at the wrong time are rejected (HTTP 409) and change nothing.
     { "index": 1, "title": "Head-of-Line Blocking", "summary": "..." }
   ],
   "current_topic": 0,
+  "current_slide": 1,
   "completed_topics": [],
   "can_raise_hand": true,
   "summary_available": false
@@ -83,6 +84,8 @@ Events sent at the wrong time are rejected (HTTP 409) and change nothing.
   - `nothing`: the lecture is finished (after the goodbye)
 - **outline**: the topic list shown next to the lecture.
 - **current_topic**: the topic being taught (highlight it in the outline).
+- **current_slide**: the PDF slide/page currently being explained. Use it to show
+  the matching uploaded PDF slide.
 - **completed_topics**: topics the student finished; show them in **green**.
   There is no progress bar and no score.
 - **summary_available**: show "Summary" at the top of the outline only when this

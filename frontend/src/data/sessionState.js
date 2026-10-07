@@ -33,6 +33,7 @@ export const sessionState = {
     },
   ],
   current_topic: 0,
+  current_slide: 1,
   completed_topics: [],
   can_raise_hand: true,
   summary_available: false,

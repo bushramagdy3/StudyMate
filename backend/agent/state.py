@@ -163,6 +163,12 @@ _MODE_TO_UI = {
 def to_response(state: TeacherState) -> TeacherResponse:
     """Turn the internal state into the TeacherResponse the frontend gets."""
     avatar_state, awaiting = _MODE_TO_UI[state["mode"]]
+    current_slide = None
+    if state["current_topic"] is not None and state["outline"]:
+        source_slides = state["outline"][state["current_topic"]]["source_slides"]
+        if source_slides:
+            current_slide = source_slides[0]
+
     return TeacherResponse(
         session_id=state["session_id"],
         speech=state["speech"],
@@ -173,6 +179,7 @@ def to_response(state: TeacherState) -> TeacherResponse:
             for i, t in enumerate(state["outline"])
         ],
         current_topic=state["current_topic"],
+        current_slide=current_slide,
         completed_topics=state["completed_topics"],
         can_raise_hand=state["mode"] == Mode.EXPLAINING,
         summary_available=get_personality(state["environment"]).offers_summary

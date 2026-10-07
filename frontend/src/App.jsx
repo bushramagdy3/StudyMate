@@ -37,6 +37,8 @@ function App() {
   const [pdfName, setPdfName] = useState(
     () => new URLSearchParams(window.location.search).get('file') || '',
   )
+  const [pdfUrl, setPdfUrl] = useState('')
+  const pdfUrlRef = useRef('')
   const [environmentId, setEnvironmentId] = useState(getInitialEnvironmentId)
 
   const selectedEnvironment =
@@ -46,8 +48,28 @@ function App() {
   useEffect(() => {
     return () => {
       window.clearTimeout(loadingTimer.current)
+
+      if (pdfUrlRef.current) {
+        URL.revokeObjectURL(pdfUrlRef.current)
+      }
     }
   }, [])
+
+  function changePdfFile(file) {
+    if (pdfUrlRef.current) {
+      URL.revokeObjectURL(pdfUrlRef.current)
+      pdfUrlRef.current = ''
+    }
+
+    if (!file) {
+      setPdfUrl('')
+      return
+    }
+
+    const nextPdfUrl = URL.createObjectURL(file)
+    pdfUrlRef.current = nextPdfUrl
+    setPdfUrl(nextPdfUrl)
+  }
 
   function goToPage(nextPage, nextEnvironmentId = environmentId) {
     if (nextPage === 'session' && !environmentExists(nextEnvironmentId)) {
@@ -93,6 +115,7 @@ function App() {
 
       {page === 'upload' && (
         <UploadPdfPage
+          onPdfFileChange={changePdfFile}
           pdfName={pdfName}
           onPdfNameChange={setPdfName}
           onBack={() => goToPage('home')}
@@ -111,7 +134,7 @@ function App() {
       )}
 
       {page === 'session' && (
-        <SessionPage environment={selectedEnvironment} />
+        <SessionPage environment={selectedEnvironment} pdfUrl={pdfUrl} />
       )}
 
       {isAboutOpen && (

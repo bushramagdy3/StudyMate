@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { MessageBar } from '../components/MessageBar.jsx'
+import { PdfSlideViewer } from '../components/PdfSlideViewer.jsx'
 import { SessionOutline } from '../components/SessionOutline.jsx'
 import { getPregeneratedSpeech } from '../data/pregeneratedSpeech.js'
 import { sessionState } from '../data/sessionState.js'
@@ -18,7 +19,7 @@ function makeInitialTeacherResponse(environmentId) {
   }
 }
 
-export function SessionPage({ environment }) {
+export function SessionPage({ environment, pdfUrl }) {
   const [teacherResponse, setTeacherResponse] = useState(() =>
     makeInitialTeacherResponse(environment.id),
   )
@@ -33,6 +34,7 @@ export function SessionPage({ environment }) {
   const currentTopic = teacherResponse.outline.find(
     (topic) => topic.index === teacherResponse.current_topic,
   )
+  const currentSlide = teacherResponse.current_slide || 1
 
   useEffect(() => {
     playSpeech(teacherResponse.speech, environment.id).catch(logSpeechError)
@@ -45,6 +47,7 @@ export function SessionPage({ environment }) {
       awaiting: 'continue',
       can_raise_hand: true,
       current_topic: topicIndex,
+      current_slide: topicIndex + 1,
       speech: [
         `Let's move to ${response.outline[topicIndex]?.title || 'this topic'}.`,
       ],
@@ -129,11 +132,17 @@ export function SessionPage({ environment }) {
 
         <div
           className="pdf-slide-slot"
-          aria-label={`PDF slide for ${
+          aria-label={`PDF slide ${currentSlide} for ${
             currentTopic?.title || 'the current topic'
-          } will appear here`}
+          }`}
           data-pdf-slide-slot
-        />
+        >
+          <PdfSlideViewer
+            pdfUrl={pdfUrl}
+            slideNumber={currentSlide}
+            topicTitle={currentTopic?.title}
+          />
+        </div>
 
         <img
           className="session-avatar"
