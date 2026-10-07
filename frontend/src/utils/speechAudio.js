@@ -18,6 +18,11 @@ let speechSequence = 0
 // audio start/end boundaries.
 const SUBTITLE_MAX_SENTENCES = 1
 const SUBTITLE_MAX_CHARS = 120
+const FISH_DIRECTION_TAG = /\[[^\]\r\n]{1,48}\]\s*/g
+
+export function textForSubtitle(text) {
+  return text.replace(FISH_DIRECTION_TAG, '').replace(/\s{2,}/g, ' ').trim()
+}
 
 /**
  * Splits text into subtitle chunks of 1-2 sentences.
@@ -58,7 +63,7 @@ export function splitIntoSubtitles(text) {
 function followAudioWithSubtitles(text, showChunk, clearSubtitle) {
   return {
     onPlaying() {
-      showChunk(text)
+      showChunk(textForSubtitle(text))
     },
     onEnd() {
       clearSubtitle()

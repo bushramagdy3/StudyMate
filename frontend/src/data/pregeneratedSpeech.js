@@ -1,29 +1,29 @@
 export const pregeneratedSpeech = {
   welcome: {
-    fileName: 'welcome.wav',
+    fileName: 'welcome.mp3',
     text: {
       'lecture-hall':
-        "Welcome. I am Professor Regina. Let us begin by looking carefully at today's lecture.",
+        "[reassuring] Welcome. I am Professor Regina. Let us begin by looking carefully at today's lecture.",
       'private-tutor':
-        'Hi, I am Regina. We will take this one step at a time.',
+        '[reassuring] Hi, I am Regina. We will take this one step at a time.',
       'study-cafe':
-        "Hey, I am Regina. Let's go through this together and make it make sense.",
+        "[excited] Hey, I am Regina. Let's go through this together and make it make sense.",
     },
   },
   handRaisePrompt: {
-    fileName: 'what-would-you-like-to-ask.wav',
+    fileName: 'what-would-you-like-to-ask.mp3',
     text: {
-      'lecture-hall': 'Yes, go ahead. What question would you like to raise?',
-      'private-tutor': 'Of course. What are you wondering about?',
-      'study-cafe': 'Yeah, tell me what part feels confusing.',
+      'lecture-hall': '[reassuring] Yes, go ahead. What question would you like to raise?',
+      'private-tutor': '[reassuring] Of course. What are you wondering about?',
+      'study-cafe': '[thoughtful] Yeah, tell me what part feels confusing.',
     },
   },
   thinking: {
-    fileName: 'let-me-think.wav',
+    fileName: 'let-me-think.mp3',
     text: {
-      'lecture-hall': 'Let me consider that for a moment.',
-      'private-tutor': 'Let me think that through for a second.',
-      'study-cafe': 'Hmm, give me a second to think about that.',
+      'lecture-hall': '[thoughtful] Let me consider that for a moment.',
+      'private-tutor': '[thoughtful] Let me think that through for a second.',
+      'study-cafe': '[thoughtful] Hmm, give me a second to think about that.',
     },
   },
 }

@@ -19,6 +19,7 @@ class Personality:
     example_phrases: tuple[str, ...]  # gives the LLM the voice to imitate
     praise_style: str  # how to react to a correct answer
     hint_style: str  # how to give a hint after a wrong answer
+    expression_style: str  # Fish Audio expression tag direction
     segments_per_topic: int  # how many short speech segments per topic explanation
     questions_per_topic: int  # how many questions to ask per topic
     offers_summary: bool = False  # "Summary" item at the top of the outline (tutor only)
@@ -44,6 +45,10 @@ PROFESSOR = Personality(
     ),
     praise_style="Brief and dignified, e.g. 'Precisely.' or 'Well reasoned.'",
     hint_style="Point the student to the relevant principle without giving the answer away.",
+    expression_style=(
+        "Calm and professional. Prefer [thoughtful], [reassuring], and an occasional "
+        "[emphasis] for an important academic point. Never sound theatrical."
+    ),
     segments_per_topic=4,
     questions_per_topic=2,
 )
@@ -68,6 +73,10 @@ TUTOR = Personality(
     ),
     praise_style="Warm and specific about what they got right, e.g. 'Yes! You spotted that...'",
     hint_style="Give a small step-by-step nudge, building on what the student already said.",
+    expression_style=(
+        "Warm and encouraging. Prefer [reassuring], [thoughtful], and a light [excited] "
+        "when the student makes progress."
+    ),
     segments_per_topic=3,
     questions_per_topic=2,
     offers_summary=True,
@@ -94,6 +103,10 @@ STUDY_FRIEND = Personality(
     ),
     praise_style="Casual and excited, e.g. 'Yes, exactly! You're a smartie.'",
     hint_style="Give a friendly nudge, often with an analogy, like 'Think of it like...'",
+    expression_style=(
+        "Playful and energetic without being noisy. Prefer [excited], [chuckling], "
+        "[reassuring], and [emphasis] when it genuinely fits."
+    ),
     segments_per_topic=3,
     questions_per_topic=1,
 )
@@ -106,9 +119,13 @@ PERSONALITIES: dict[Environment, Personality] = {
 
 # Rules every personality follows, whatever its style.
 SHARED_RULES = (
-    "Everything you write is read aloud by text-to-speech: write plain spoken "
+    "Everything you write is read aloud by Fish Audio: write plain spoken "
     "sentences, with no markdown, bullet points, emojis, code blocks or symbols "
     "that can't be spoken.",
+    "Every line of teacher dialogue must contain one natural Fish Audio direction "
+    "tag such as [thoughtful], [reassuring], [excited], [emphasis], or [chuckling]. "
+    "Use one or two tags at most, placed where the delivery should change. The tags "
+    "guide audio only and are removed before subtitles are shown.",
     "Keep each turn short: a few sentences, not a long monologue.",
     "Teach only from the lecture content you are given. If something isn't covered "
     "there, say so briefly instead of making it up.",
@@ -132,6 +149,7 @@ def build_system_prompt(personality: Personality) -> str:
         "",
         f"When the student answers correctly: {personality.praise_style}",
         f"When the student answers incorrectly: {personality.hint_style}",
+        f"Fish Audio delivery: {personality.expression_style}",
         "",
         "Rules:",
         *(f"- {rule}" for rule in SHARED_RULES),

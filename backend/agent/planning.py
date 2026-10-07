@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 
 from agent.contract import LectureChunk
 from agent.llm import LLM, LLMError, messages
+from agent.personalities import get_personality
 from agent.state import Mode, OutlineTopic, TeacherState
 
 MAX_TOPICS = 12
@@ -96,19 +97,29 @@ def lecture_title(lecture: list[LectureChunk]) -> str:
     return "today's lecture"
 
 
-def intro_speech(lecture: list[LectureChunk], outline: list[OutlineTopic]) -> str:
+def intro_speech(
+    lecture: list[LectureChunk],
+    outline: list[OutlineTopic],
+    environment,
+) -> str:
     title = lecture_title(lecture)
     topic_names = [topic["title"] for topic in outline[:3]]
+    role = get_personality(environment).role
+    tag = {
+        "professor": "[reassuring]",
+        "tutor": "[reassuring]",
+        "study friend": "[excited]",
+    }[role]
 
     if topic_names:
         return (
-            f"Welcome. Before we start, this lecture is about {title}. "
+            f"{tag} Welcome. Before we start, this lecture is about {title}. "
             f"I planned it into topics like {', '.join(topic_names)}. "
             "Choose a topic from the outline when you are ready, and I will teach it step by step."
         )
 
     return (
-        f"Welcome. Before we start, this lecture is about {title}. "
+        f"{tag} Welcome. Before we start, this lecture is about {title}. "
         "Choose a topic from the outline when you are ready, and I will teach it step by step."
     )
 
@@ -231,7 +242,7 @@ def make_plan_node(llm: LLM):
 
     def plan(state: TeacherState) -> dict:
         outline = plan_lecture(llm, state["lecture"])
-        intro = intro_speech(state["lecture"], outline)
+        intro = intro_speech(state["lecture"], outline, state["environment"])
         return {
             "outline": outline,
             "current_topic": None,

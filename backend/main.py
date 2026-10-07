@@ -18,8 +18,12 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile, Response
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 from pydantic import BaseModel
+import truststore
 
 load_dotenv(Path(__file__).parent / ".env")
+# On Windows, use the OS certificate store for outbound API calls. This keeps
+# Fish Audio TLS verification enabled while supporting the local trust chain.
+truststore.inject_into_ssl()
 
 app = FastAPI()
 
@@ -361,88 +365,75 @@ async def process_pdf_upload(pdf: UploadFile) -> list[LectureChunk]:
 # TEXT-TO-SPEECH
 # ---------------------------------------------------------
 
-async def generate_speech_audio(text: str):
-    api_key = (
-        os.getenv("FEATHERLESS_API_KEY")
-        or os.getenv("API_KEY")
-    )
+FISH_TTS_URL = "https://api.fish.audio/v1/tts"
+FISH_VOICE_ID = "bddf65d5a84c4a9aa36b7136bdac57a9"  # Women KatKat
+FISH_MODEL = "s2.1-pro-free"
+
+
+def fish_audio_api_key() -> str:
+    api_key = os.getenv("FISH_AUDIO_API_KEY")
 
     if not api_key:
         raise HTTPException(
             status_code=500,
-            detail="Missing Featherless API key.",
+            detail="Missing FISH_AUDIO_API_KEY in backend/.env.",
         )
 
-    url = "https://api.featherless.ai/v1/audio/speech"
+    return api_key
+
+
+async def generate_speech_audio(
+    text: str,
+    transport: httpx.AsyncBaseTransport | None = None,
+) -> tuple[bytes, str]:
+    """Generate an MP3 with Fish Audio S2.1 Pro and the shared Regina voice."""
+    api_key = fish_audio_api_key()
 
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
+        "model": FISH_MODEL,
     }
 
     payload = {
-        "model": "hexgrad/Kokoro-82M",
-        "input": text,
-        "voice": "af_bella",
-
-        # We request WAV, but Featherless can still return
-        # the model's actual native format.
-        "response_format": "wav",
-
-        # IMPORTANT:
-        # Ask Featherless for a self-describing JSON response
-        # instead of ambiguous raw binary.
-        "delivery": "json",
+        # Fish direction tags stay in text. They guide delivery but are removed
+        # by the frontend before the same text is displayed as a subtitle.
+        "text": text,
+        "reference_id": FISH_VOICE_ID,
+        "format": "mp3",
+        "normalize": True,
+        "latency": "balanced",
     }
 
     async with httpx.AsyncClient(
-        timeout=60.0
+        timeout=60.0,
+        transport=transport,
     ) as client:
-
-        response = await client.post(
-            url,
-            headers=headers,
-            json=payload,
-        )
+        try:
+            response = await client.post(
+                FISH_TTS_URL,
+                headers=headers,
+                json=payload,
+            )
+        except httpx.HTTPError as error:
+            raise HTTPException(
+                status_code=502,
+                detail=f"Fish Audio TTS could not be reached: {error}",
+            ) from error
 
     if response.status_code != 200:
         raise HTTPException(
             status_code=502,
-            detail=f"TTS failed: {response.text}",
+            detail=f"Fish Audio TTS failed: {response.text}",
         )
 
-    try:
-        data = response.json()
-    except ValueError:
+    if not response.content:
         raise HTTPException(
             status_code=502,
-            detail="Featherless returned an invalid TTS response.",
+            detail="Fish Audio returned empty audio.",
         )
 
-    audio_base64 = data.get("audio")
-    audio_format = data.get("format")
-
-    if not audio_base64:
-        raise HTTPException(
-            status_code=502,
-            detail="Featherless returned no audio data.",
-        )
-
-    try:
-        audio_bytes = base64.b64decode(audio_base64)
-    except Exception:
-        raise HTTPException(
-            status_code=502,
-            detail="Could not decode Featherless audio.",
-        )
-
-    if len(audio_bytes) == 0:
-        raise HTTPException(
-            status_code=502,
-            detail="Featherless returned empty audio.",
-        )
-
-    return audio_bytes, audio_format
+    return response.content, "mp3"
 
 
 @app.get('/')
@@ -524,21 +515,7 @@ async def tutorSpeech(speech: TTR):
         )
     )
 
-    media_types = {
-        "wav": "audio/wav",
-        "mp3": "audio/mpeg",
-        "opus": "audio/ogg",
-        "aac": "audio/aac",
-        "flac": "audio/flac",
-        "pcm": "audio/L16",
-    }
-
-    media_type = media_types.get(
-        audio_format,
-        "application/octet-stream",
-    )
-
     return Response(
         content=audio_bytes,
-        media_type=media_type,
+        media_type="audio/mpeg",
     )
