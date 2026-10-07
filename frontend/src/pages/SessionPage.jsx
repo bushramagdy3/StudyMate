@@ -177,6 +177,9 @@ export function SessionPage({
         if (token === actionToken.current) {
           setSubtitle('')
           setIsAudioPending(false)
+          if (teacherResponse.awaiting === 'nothing') {
+            setAvatarPosture('idle')
+          }
         }
 
         if (

@@ -200,18 +200,20 @@ def test_topic_finished():
     assert topic_finished(make_state(segment_index=4))
 
 
-def test_finished_topic_is_marked_complete_and_waits_for_the_outline():
+def test_finished_topic_is_marked_complete_and_introduces_the_next_topic():
     update = next_topic(make_state(segment_index=4))
     assert update["current_topic"] is None
     assert update["completed_topics"] == [0]
     assert update["segments"] == [] and update["question_points"] == []
     assert update["segment_index"] == 0
-    assert update["speech"] == []
+    assert "Pipelining" in update["speech"][0]
+    assert "Head-of-Line Blocking" in update["speech"][0]
     assert update["mode"] is Mode.WAITING_TOPIC
 
 
-def test_last_topic_also_waits_instead_of_auto_advancing():
+def test_last_topic_announces_the_quiz_without_auto_advancing():
     update = next_topic(make_state(current_topic=1, completed_topics=[0], segment_index=4))
     assert update["current_topic"] is None
     assert update["completed_topics"] == [0, 1]
-    assert update["mode"] is Mode.WAITING_TOPIC
+    assert update["mode"] is Mode.ENDED
+    assert "quiz is next" in update["speech"][0].lower()

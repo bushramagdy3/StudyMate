@@ -177,10 +177,13 @@ def finish_intro(state: TeacherState) -> dict:
 
 
 def closing_prompt(state: TeacherState) -> str:
-    """A short goodbye, naming the topics to review if the student made mistakes."""
+    """A short lecture-complete note that prepares the student for the quiz."""
     outline = state["outline"]
     to_review = [outline[i]["title"] for i in state["topics_to_improve"] if i < len(outline)]
-    lines = ["The lecture is finished. Say a short, warm goodbye in 1 to 3 spoken sentences."]
+    lines = [
+        "The lecture is finished. In 1 to 3 spoken sentences, say that the quiz is next "
+        "and encourage the student to collect the key ideas. Do not say goodbye."
+    ]
     if to_review:
         lines.append(
             "The student made mistakes on questions about: " + ", ".join(to_review) + ". "
@@ -191,15 +194,15 @@ def closing_prompt(state: TeacherState) -> str:
 
 
 def fallback_closing(state: TeacherState) -> str:
-    text = "That's all for today. "
+    text = "You have reached the end of the lecture. "
     to_review = [state["outline"][i]["title"] for i in state["topics_to_improve"]]
     if to_review:
         text += f"It's worth reviewing {', '.join(to_review)}. "
-    return text + "Great work, see you next time!"
+    return text + "Take a moment to collect the key ideas; the quiz is next."
 
 
 def make_closing_node(llm: LLM):
-    """The 'closing' node: a goodbye with a short summary, then the session is over."""
+    """The 'closing' node: wrap up the lecture and point toward the quiz."""
 
     def closing(state: TeacherState) -> dict:
         personality = get_personality(state["environment"])

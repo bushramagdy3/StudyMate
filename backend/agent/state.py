@@ -174,6 +174,8 @@ _MODE_TO_UI = {
 def to_response(state: TeacherState) -> TeacherResponse:
     """Turn the internal state into the TeacherResponse the frontend gets."""
     avatar_state, awaiting = _MODE_TO_UI[state["mode"]]
+    if state["speech"] and state["mode"] in (Mode.WAITING_TOPIC, Mode.ENDED):
+        avatar_state = AvatarState.SPEAKING
     started_topics = sorted(
         set(state["completed_topics"])
         | set(state["topic_progress"])

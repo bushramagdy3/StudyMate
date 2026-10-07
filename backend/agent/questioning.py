@@ -221,9 +221,31 @@ def topic_finished(state: TeacherState) -> bool:
 
 
 def next_topic(state: TeacherState) -> dict:
-    """The 'next_topic' node: marks the topic done and waits at the outline."""
-    completed = sorted(set(state["completed_topics"]) | {state["current_topic"]})
+    """Mark the topic done, announce what comes next, then return to the outline."""
+    finished_index = state["current_topic"]
+    completed = sorted(set(state["completed_topics"]) | {finished_index})
     progress = save_progress(state)
+    next_index = next(
+        (index for index in range(len(state["outline"])) if index not in completed),
+        None,
+    )
+
+    if next_index is None:
+        speech = (
+            "[reassuring] You have reached the end of the lecture. "
+            "[emphasis] Take a moment to collect the key ideas; the quiz is next."
+        )
+        mode = Mode.ENDED
+    else:
+        finished_title = state["outline"][finished_index]["title"]
+        next_title = state["outline"][next_index]["title"]
+        speech = (
+            f"[thoughtful] That completes {finished_title}. "
+            f"[emphasis] Next, we will explore {next_title}. "
+            "Choose it from the outline when you are ready."
+        )
+        mode = Mode.WAITING_TOPIC
+
     return {
         "completed_topics": completed,
         "current_topic": None,
@@ -234,7 +256,7 @@ def next_topic(state: TeacherState) -> dict:
         "question_points": [],
         "pending_question": None,
         "attempts": 0,
-        "speech": [],
+        "speech": [speech],
         "speech_slides": [],
-        "mode": Mode.WAITING_TOPIC,
+        "mode": mode,
     }

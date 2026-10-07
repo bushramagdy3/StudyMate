@@ -22,6 +22,7 @@ from agent.navigation import (
     make_closing_node,
     make_repeat_node,
 )
+from agent.questioning import next_topic
 from agent.state import Mode, initial_state
 
 OUTLINE = [
@@ -199,28 +200,46 @@ def test_after_next_topic_always_waits_for_student_selection():
     assert after_next_topic(make_state(current_topic=None, mode=Mode.WAITING_TOPIC)) == "wait"
 
 
+def test_topic_completion_introduces_the_next_outline_topic():
+    update = next_topic(make_state(current_topic=0, completed_topics=[]))
+
+    assert update["mode"] is Mode.WAITING_TOPIC
+    assert "Pipelining" in update["speech"][0]
+    assert "Head-of-Line Blocking" in update["speech"][0]
+    assert "Choose it from the outline" in update["speech"][0]
+
+
+def test_last_topic_announces_the_quiz_without_a_goodbye():
+    update = next_topic(make_state(current_topic=2, completed_topics=[0, 1]))
+
+    assert update["mode"] is Mode.ENDED
+    assert "quiz is next" in update["speech"][0].lower()
+    assert "goodbye" not in update["speech"][0].lower()
+
+
 # --- end --------------------------------------------------------------------
 
 
 @pytest.mark.parametrize("environment", list(Environment))
-def test_goodbye_is_short_and_names_topics_to_review(environment):
+def test_closing_prepares_for_quiz_and_names_topics_to_review(environment):
     prompt = closing_prompt(make_state(environment=environment, completed_topics=[0, 1], topics_to_improve=[1]))
-    assert "short, warm goodbye" in prompt
+    assert "quiz is next" in prompt
+    assert "Do not say goodbye" in prompt
     assert "mistakes on questions about: Head-of-Line Blocking" in prompt
     assert "Don't recap" in prompt
     assert "Requests without waiting" not in prompt
 
 
-def test_goodbye_without_mistakes_has_nothing_to_review():
+def test_closing_without_mistakes_has_nothing_to_review():
     prompt = closing_prompt(make_state(completed_topics=[0, 1]))
     assert "mistakes" not in prompt and "review" not in prompt
 
 
 def test_closing_ends_the_session():
-    llm, sent = fake_llm("Great session today! Goodbye.")
+    llm, sent = fake_llm("The lecture is complete. Take a moment to collect the key ideas; the quiz is next.")
     update = make_closing_node(llm)(make_state(completed_topics=[0]))
 
-    assert update["speech"] == ["Great session today! Goodbye."]
+    assert update["speech"] == ["The lecture is complete. Take a moment to collect the key ideas; the quiz is next."]
     assert update["mode"] is Mode.ENDED
     assert update["current_topic"] is None
     assert "Professor Regina" in sent[0]["messages"][0]["content"]
@@ -230,6 +249,6 @@ def test_closing_fallback_when_llm_fails():
     llm, _ = fake_llm(status=503)
     state = make_state(completed_topics=[0], topics_to_improve=[0])
     update = make_closing_node(llm)(state)
-    assert update["speech"] == ["That's all for today. It's worth reviewing Pipelining. Great work, see you next time!"]
+    assert update["speech"] == ["You have reached the end of the lecture. It's worth reviewing Pipelining. Take a moment to collect the key ideas; the quiz is next."]
     assert update["mode"] is Mode.ENDED
-    assert fallback_closing(make_state()) == "That's all for today. Great work, see you next time!"
+    assert fallback_closing(make_state()) == "You have reached the end of the lecture. Take a moment to collect the key ideas; the quiz is next."
