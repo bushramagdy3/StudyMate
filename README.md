@@ -1,160 +1,220 @@
-# CANVA LINK
-https://canva.link/b95zwb5vrq201ue
-# AI Lecture Companion — ForgeHacks 2026
+# StudyMate
 
-A project for the **ForgeHacks AI + Education** track.
+**StudyMate turns lecture PDFs into interactive AI-led study sessions.**
 
-The idea is to turn a normal lecture PDF into an **interactive AI-led lecture**.
+Built for the **ForgeHacks 2026 AI + Education Track**, StudyMate aims to help students move beyond memorization by actively explaining concepts, asking questions, giving feedback, tracking weak areas, and keeping the learning experience interactive.
 
-The user uploads their lecture slides, chooses a learning environment such as a **lecture hall, private tutoring session, or café with a study friend**, and an AI character teaches the lecture aloud while actively interacting with the student.
+## Why StudyMate?
 
-## Tech Stack
+Lecture slides are usually designed to support a professor's explanation, not replace it. They often contain brief text, diagrams, formulas, and examples that can be difficult to understand alone.
 
-- **Frontend:** React
-- **Backend:** Python + FastAPI
-- **AI Workflow:** LangGraph
-- **LLM:** Featherless AI
-- **Voice:** External Text-to-Speech API
-- **Avatar / Environment:** 2D animated avatar + 2D room/background
+Uploading the slides to a normal AI chatbot can help, but the experience is still very different from attending a real lecture: the AI can lose its place, explanations become disconnected from the slides, and asking questions can interrupt the original flow.
+
+StudyMate was built to make studying a lecture feel more like **actually being taught it**.
+
+---
+
+## What It Does
+
+1. Upload a lecture PDF.
+2. StudyMate analyzes each slide, including important diagrams and visual content.
+3. The lecture is reorganized into a logical topic-based outline.
+4. Choose one of three learning environments:
+   - **Lecture Hall** — Professor Regina
+   - **Private Tutor** — one-on-one tutoring
+   - **Study Café** — casual study-friend experience
+5. Regina teaches each topic aloud while the relevant PDF slide stays synchronized.
+6. The AI asks questions during the lesson and evaluates the student's answers.
+7. Wrong answers receive hints and another attempt instead of immediately revealing the solution.
+8. Students can **raise their hand** during an explanation, ask a question, and resume from the exact point where the lecture stopped.
+9. Completed topics can be replayed with a different explanation.
+10. Topics the student struggles with are stored so they can be emphasized in the final adaptive quiz.
+
+---
 
 ## How It Works
 
 ```text
-Upload Lecture PDF
-        ↓
-Backend extracts lecture content
-        ↓
-User chooses learning environment
-        ↓
-Environment determines AI personality
-        ↓
-AI analyzes the lecture
-        ↓
-AI creates a topic-based session outline
-        ↓
-Interactive lecture begins
-```
-
-The lecture will **not necessarily follow one slide at a time**. The AI will divide the lecture into small logical topics/concepts and create a teaching flow from them.
-
-Example:
-
-```text
-Lecture Outline
-
-1. HTTP Versions
-2. HTTP/1.1 Pipelining
-3. Head-of-Line Blocking
-4. HTTP/2 Multiplexing
-5. HTTP/3
-```
-
-## LangGraph Workflow
-
-LangGraph will control the state of the lecture and decide what the AI should do next.
-
-The state will keep track of things such as:
-
-```text
-- selected learning environment / AI personality
-- lecture outline
-- current topic
-- current position inside the topic
-- whether the AI is explaining
-- whether the AI is asking a question
-- whether the student raised their hand
-- the student's current question/answer
-- completed topics
-```
-
-### Normal Lecture Flow
-
-```text
-Explain Topic
-      ↓
-Ask Student Question
-      ↓
-Wait for Text Answer
-      ↓
-Evaluate Answer
-      ↓
-Give Feedback
-      ↓
-Continue Lecture
-```
-
-Student participation will initially be **text-based only**. The student types answers into a text box instead of using microphone input.
-
-## Raise Hand
-
-During the lecture, the student can **raise their hand** whenever they have a question.
-
-```text
-AI is explaining
-      ↓
-Student raises hand
-      ↓
-Pause lecture
-      ↓
-Student types question
-      ↓
-AI answers
-      ↓
-Resume exactly where the lecture stopped
-```
-
-The LangGraph state allows the AI to remember where it was before answering the interruption.
-
-## Session Outline
-
-The student can always see the current lecture outline and their progress.
-
-They can:
-
-- see which topic is currently being explained
-- go back to a previous topic
-- use a **repeat / explain again** button if they did not understand something
-- continue through the lecture
-- end the session whenever they want
-
-## Voice
-
-The LLM generates what the teacher should say as text.
-
-```text
-LLM Response
+Upload PDF
     ↓
-External TTS API
+PyMuPDF processes slides
     ↓
-Audio
+Visual slides → Featherless multimodal analysis
     ↓
-AI Avatar Speaks
+AI creates topic-based lecture outline
+    ↓
+LangGraph manages the teaching session
+    ↓
+Explain → Question → Evaluate → Feedback
+    ↓
+Track weak topics
+    ↓
+Adaptive final quiz
 ```
 
-We will use a separate Text-to-Speech service rather than building voice generation ourselves.
+The **LangGraph** agent keeps track of the current topic, current slide, explanation position, completed topics, questions, answers, conversation context, and topics the student needs to improve.
 
-## Avatar & Environment
+This allows StudyMate to behave like one continuous lesson instead of a sequence of disconnected chatbot messages.
 
-The visual experience will stay intentionally lightweight for the hackathon.
+---
 
-The AI will be represented by a **2D animated avatar** with states such as:
+## Key Features
+
+- AI-generated lecture outline
+- Multimodal understanding of diagrams and visual slides
+- Three different tutor personalities
+- Spoken AI explanations
+- Synchronized PDF slides
+- Live subtitles
+- Questions during explanations
+- AI answer evaluation
+- Hints and retries
+- Raise-hand interruptions
+- Exact explanation resume
+- Topic replay with a new explanation
+- Weak-topic tracking
+- Adaptive final quiz
+
+---
+
+## Tech Stack
+
+**Frontend:** React, JavaScript, HTML, CSS, Vite, PDF.js
+
+**Backend:** Python, FastAPI, Pydantic, PyMuPDF, HTTPX
+
+**AI Workflow:** LangGraph
+
+**LLM & Multimodal AI:** Featherless AI
+
+**Text-to-Speech:** Fish Audio
+
+---
+
+# Run Locally
+
+## 1. Clone the repository
+
+```bash
+git clone https://github.com/bushramagdy3/StudyMate.git
+cd StudyMate
+```
+
+## 2. Backend
+
+```bash
+cd backend
+python -m venv venv
+```
+
+Activate the environment.
+
+### Windows
+
+```bash
+venv\Scripts\activate
+```
+
+### macOS / Linux
+
+```bash
+source venv/bin/activate
+```
+
+Install dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+Create:
 
 ```text
-Idle
-Speaking
-Listening
-Thinking
-Asking a Question
+backend/.env
 ```
 
-The selected learning environment will also be **2D**, for example:
+Add these two API keys:
 
-- **Lecture Hall** → Professor personality
-- **Private Study Room** → Tutor personality
-- **Café** → Study-friend personality
+```env
+FEATHERLESS_API_KEY=your_featherless_api_key
+FISH_AUDIO_API_KEY=your_fish_audio_api_key
+```
 
-All environments use the same AI system — only the personality, voice, avatar, and visual setting change.
+Start the backend:
 
-## MVP Goal
+```bash
+uvicorn main:app --reload
+```
 
-**Upload PDF → choose environment → AI plans lecture → AI teaches aloud → student participates → student can raise their hand → AI asks questions → user can repeat topics or end the session.**
+The backend runs at:
+
+```text
+http://127.0.0.1:8000
+```
+
+---
+
+## 3. Frontend
+
+Open another terminal:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Then open the local URL shown by Vite, usually:
+
+```text
+http://localhost:5173
+```
+
+---
+
+## API Notice
+
+StudyMate depends on external AI APIs, so API availability depends on the providers and the API keys being used.
+
+The project currently uses Fish Audio's:
+
+```text
+s2.1-pro-free
+```
+
+Fish Audio currently states that free access to this model is available through **November 30, 2026**. After that date, the free model may be changed, extended, or become unavailable, which could cause StudyMate's text-to-speech feature to stop working until the integration is updated.
+
+Featherless AI also requires a valid API key and available API credits.
+
+---
+
+## Project Structure
+
+```text
+StudyMate/
+├── backend/
+│   ├── agent/          # LangGraph teaching workflow
+│   ├── main.py         # FastAPI routes, PDF processing and TTS
+│   └── requirements.txt
+│
+├── frontend/
+│   ├── public/         # Pregenerated audio
+│   ├── src/
+│   │   ├── assets/
+│   │   ├── components/
+│   │   ├── pages/
+│   │   └── utils/
+│   └── package.json
+│
+└── README.md
+```
+
+---
+
+## ForgeHacks 2026
+
+StudyMate was built around the Education Track challenge:
+
+> **Build an AI-powered solution that helps learners move beyond memorization, understand concepts, make connections, and apply what they learn.**
+
+Instead of making another AI that simply answers questions, StudyMate tries to create an AI that **actually teaches, interacts, remembers, and adapts to the learner.**
