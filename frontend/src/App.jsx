@@ -228,10 +228,12 @@ function App() {
   return (
     <>
       <Header
+        completedTopics={teacherResponse?.completed_topics.length || 0}
         isSession={displayedPage === 'session'}
         onAbout={() => setIsAboutOpen(true)}
         onEndSession={requestEndSession}
         onHome={displayedPage === 'session' ? requestEndSession : () => goToPage('home')}
+        totalTopics={teacherResponse?.outline.length || 0}
       />
 
       {displayedPage === 'home' && (

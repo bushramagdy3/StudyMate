@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Windows Codex bug: a literal system-drive cache folder can be created in cwd.
+%SystemDrive%/
