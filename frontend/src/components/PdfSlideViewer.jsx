@@ -19,7 +19,7 @@ function safelyCall(resource, method) {
   }
 }
 
-export function PdfSlideViewer({ pdfUrl, slideNumber, topicTitle }) {
+export function PdfSlideViewer({ pdfUrl, slideNumber, topicTitle, onError }) {
   const hostRef = useRef(null)
   const canvasRef = useRef(null)
   const [pdfDocument, setPdfDocument] = useState(null)
@@ -66,6 +66,7 @@ export function PdfSlideViewer({ pdfUrl, slideNumber, topicTitle }) {
         if (!cancelled && error?.name !== 'AbortError') {
           console.error(error)
           setStatus('error')
+          onError?.(error, 'Could not open this PDF')
         }
       }
     }
@@ -78,7 +79,7 @@ export function PdfSlideViewer({ pdfUrl, slideNumber, topicTitle }) {
       safelyCall(loadingTask, 'destroy')
       safelyCall(loadedDocument, 'destroy')
     }
-  }, [pdfUrl])
+  }, [onError, pdfUrl])
 
   useEffect(() => {
     if (!pdfDocument || !hostRef.current || !canvasRef.current) {
@@ -153,6 +154,7 @@ export function PdfSlideViewer({ pdfUrl, slideNumber, topicTitle }) {
         ) {
           console.error(error)
           setStatus('error')
+          onError?.(error, 'Could not render this slide')
         }
       }
     }
@@ -183,7 +185,7 @@ export function PdfSlideViewer({ pdfUrl, slideNumber, topicTitle }) {
       safelyCall(renderTask, 'cancel')
       safelyCall(renderedPage, 'cleanup')
     }
-  }, [pdfDocument, slideNumber])
+  }, [onError, pdfDocument, slideNumber])
 
   if (!pdfUrl) {
     return (

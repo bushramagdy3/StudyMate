@@ -32,21 +32,18 @@ export function SessionPage({
   initialTeacherResponse,
   pdfUrl,
   onTeacherResponseChange,
+  onError,
 }) {
   const [teacherResponse, setTeacherResponse] = useState(initialTeacherResponse)
   const [isPending, setIsPending] = useState(false)
-  const [requestError, setRequestError] = useState('')
   const [pendingAction, setPendingAction] = useState(null)
   const [subtitle, setSubtitle] = useState('')
   const [isAudioPending, setIsAudioPending] = useState(false)
+  const [avatarPosture, setAvatarPosture] = useState('idle')
   const playingSegment = useRef(0)
   const actionToken = useRef(0)
   const eventRequests = useRef(new Set())
   const isBusy = isPending || isAudioPending
-
-  const avatarPosture = isBusy
-    ? 'thinking'
-    : teacherResponse.avatar_state || 'idle'
 
   const avatarImage =
     environment.avatars[avatarPosture] ||
@@ -95,7 +92,6 @@ export function SessionPage({
 
     const controller = new AbortController()
     eventRequests.current.add(controller)
-    setRequestError('')
     setIsPending(true)
     setPendingAction({
       label: options.status || 'Thinking…',
@@ -104,6 +100,11 @@ export function SessionPage({
 
     if (options.playThinking) {
       playThinkingSpeech(environment.id, {
+        onStart: () => {
+          if (token === actionToken.current) {
+            setAvatarPosture('thinking')
+          }
+        },
         onSegment: (_index, text) => {
           if (token === actionToken.current) {
             setSubtitle(text)
@@ -124,8 +125,7 @@ export function SessionPage({
       }
     } catch (error) {
       if (error.name !== 'AbortError' && token === actionToken.current) {
-        console.error(error)
-        setRequestError(error.message || 'Could not continue the session.')
+        onError?.(error, 'Could not continue the session')
       }
     } finally {
       eventRequests.current.delete(controller)
@@ -138,6 +138,7 @@ export function SessionPage({
   }, [
     applyTeacherResponse,
     environment.id,
+    onError,
     teacherResponse.session_id,
   ])
 
@@ -149,11 +150,13 @@ export function SessionPage({
         if (token === actionToken.current) {
           setIsAudioPending(true)
           setSubtitle('')
+          setAvatarPosture('thinking')
         }
       },
       onStart: () => {
         if (token === actionToken.current) {
           setIsAudioPending(false)
+          setAvatarPosture(teacherResponse.avatar_state || 'speaking')
         }
       },
       onSegment: (index, text) => {
@@ -192,6 +195,7 @@ export function SessionPage({
     teacherResponse.current_topic,
     teacherResponse.phase,
     teacherResponse.speech,
+    teacherResponse.avatar_state,
   ])
 
   function chooseTopic(topicIndex) {
@@ -254,12 +258,6 @@ export function SessionPage({
         {teacherResponse.speech.join(' ')}
       </p>
 
-      {requestError && (
-        <p className="session-request-error" role="alert">
-          {requestError}
-        </p>
-      )}
-
       <section
         className="session-stage"
         aria-label={`${environment.name} session`}
@@ -281,6 +279,7 @@ export function SessionPage({
             pdfUrl={pdfUrl}
             slideNumber={currentSlide}
             topicTitle={currentTopic?.title}
+            onError={onError}
           />
         </div>
 

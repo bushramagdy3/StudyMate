@@ -652,7 +652,10 @@ button {
 
 .session-avatar {
   animation: avatar-idle 3.4s ease-in-out infinite;
+  display: block;
+  height: auto;
   image-rendering: pixelated;
+  object-fit: contain;
   position: absolute;
   transform-origin: center bottom;
   z-index: 3;
@@ -728,21 +731,24 @@ button {
 }
 
 .lecture-hall .session-avatar {
-  left: 77.9%;
-  top: 32.7%;
-  width: 16.3%;
+  /* The transparent sprite canvas is taller than Regina. Anchor her feet
+     on the stage, leaving the lower caption lane unobstructed. */
+  left: 76.8%;
+  top: 33%;
+  width: 18.5%;
 }
 
 .private-tutor .session-avatar {
   left: 65.8%;
-  top: 21.1%;
+  top: 25%;
   width: 17.2%;
 }
 
 .study-cafe .session-avatar {
-  left: 69.1%;
-  top: 18.8%;
-  width: 19.3%;
+  /* In the cafe Regina is intentionally foreground scale, beside the laptop. */
+  left: 64.5%;
+  top: 28%;
+  width: 27.5%;
 }
 
 .lecture-hall .pdf-slide-slot {
@@ -1111,6 +1117,98 @@ button {
   margin-left: 8px;
   margin-top: 0.42em;
   width: auto;
+}
+
+.loading-stage {
+  color: var(--cream);
+  font-family: var(--pixel-font);
+  font-size: clamp(14px, 1.1vw, 19px);
+  font-weight: 700;
+  line-height: 1.45;
+  margin: clamp(14px, 1.5vw, 22px) 0 0;
+  max-width: 100%;
+  text-align: center;
+  text-shadow: 2px 2px 0 #000;
+}
+
+.warning-popup {
+  align-items: center;
+  animation: modal-pop 220ms steps(6, end) both;
+  color: var(--cream);
+  display: flex;
+  flex-direction: column;
+  max-width: 420px;
+  padding: 0;
+  position: relative;
+  text-align: center;
+  text-shadow: 3px 3px 0 #000;
+  width: min(38vw, 420px);
+}
+
+.warning-icon {
+  image-rendering: pixelated;
+  margin-bottom: clamp(12px, 1.5vw, 22px);
+  width: min(38%, 132px);
+}
+
+.warning-popup h2 {
+  font-family: var(--pixel-font);
+  font-size: clamp(24px, 2vw, 34px);
+  font-weight: 800;
+  line-height: 1.1;
+  margin: 0;
+}
+
+.warning-popup p {
+  font-family: var(--pixel-font);
+  font-size: clamp(15px, 1.25vw, 21px);
+  font-weight: 700;
+  line-height: 1.5;
+  margin: clamp(14px, 1.8vw, 25px) 0 0;
+  max-width: 100%;
+}
+
+.warning-actions {
+  display: flex;
+  gap: clamp(12px, 1.2vw, 20px);
+  justify-content: center;
+  margin-top: clamp(22px, 2.5vw, 36px);
+  width: 100%;
+}
+
+.warning-button {
+  border: clamp(3px, 0.24vw, 4px) solid #f1b382;
+  box-shadow:
+    0 0 0 clamp(2px, 0.18vw, 3px) #120d0b,
+    inset 0 0 0 clamp(2px, 0.18vw, 3px) rgba(73, 42, 34, 0.45);
+  cursor: pointer;
+  flex: 1 1 0;
+  font-family: var(--pixel-font);
+  font-size: clamp(16px, 1.3vw, 22px);
+  font-weight: 800;
+  min-height: clamp(48px, 4vw, 64px);
+  padding: 0.4em 0.8em;
+  text-shadow: none;
+  transition: filter 120ms ease, transform 120ms ease;
+}
+
+.warning-button:hover {
+  filter: brightness(1.12);
+  transform: translateY(-1px);
+}
+
+.warning-button:active {
+  transform: translateY(2px) scale(0.98);
+}
+
+.warning-button.primary {
+  background: linear-gradient(180deg, #fff8ea, #f6d8b1);
+  color: var(--ink);
+}
+
+.warning-button.secondary {
+  background: linear-gradient(180deg, #4a302a, #30201c);
+  color: var(--cream);
 }
 
 @media (prefers-reduced-motion: reduce) {

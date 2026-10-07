@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import './App.css'
 import { AboutPopup } from './components/AboutPopup.jsx'
 import { Header } from './components/Header.jsx'
 import { LoadingPopup } from './components/LoadingPopup.jsx'
+import { WarningPopup } from './components/WarningPopup.jsx'
 import {
   abortAllSessionRequests,
   deleteSession,
@@ -40,7 +41,7 @@ function App() {
   const [page, setPage] = useState(getInitialPage)
   const [isAboutOpen, setIsAboutOpen] = useState(false)
   const [isLoadingSession, setIsLoadingSession] = useState(false)
-  const [sessionError, setSessionError] = useState('')
+  const [dialog, setDialog] = useState(null)
   const [pdfName, setPdfName] = useState(
     () => new URLSearchParams(window.location.search).get('file') || '',
   )
@@ -55,6 +56,32 @@ function App() {
     environments.find((environment) => environment.id === environmentId) ||
     environments[0]
   const displayedPage = page === 'session' && !teacherResponse ? 'home' : page
+
+  const showError = useCallback((error, title = 'Something went wrong') => {
+    if (error?.name === 'AbortError') {
+      return
+    }
+
+    console.error(error)
+    setDialog({
+      kind: 'error',
+      title,
+      message:
+        error?.message ||
+        (typeof error === 'string' ? error : 'Please try again in a moment.'),
+    })
+  }, [])
+
+  useEffect(() => {
+    function handleUnhandledRejection(event) {
+      showError(event.reason)
+    }
+
+    window.addEventListener('unhandledrejection', handleUnhandledRejection)
+    return () => {
+      window.removeEventListener('unhandledrejection', handleUnhandledRejection)
+    }
+  }, [showError])
 
   useEffect(() => {
     return () => {
@@ -113,7 +140,7 @@ function App() {
       return
     }
 
-    setSessionError('')
+    setDialog(null)
     setIsLoadingSession(true)
     abortStartSession()
 
@@ -145,8 +172,20 @@ function App() {
       }
 
       setIsLoadingSession(false)
-      setSessionError(error.message || 'Could not start the session.')
+      setDialog({
+        kind: 'start-error',
+        title: 'Could not start the session',
+        message: error.message || 'Please check your PDF and try again.',
+      })
     }
+  }
+
+  function requestEndSession() {
+    setDialog({
+      kind: 'end-session',
+      title: 'Leave this session?',
+      message: 'Your current study session will be closed.',
+    })
   }
 
   function endSession() {
@@ -170,7 +209,20 @@ function App() {
     }
 
     // Session deletion is cleanup only. It must not hold the UI on a blank page.
-    deleteSession(sessionId).catch((error) => console.error(error))
+    deleteSession(sessionId).catch((error) =>
+      showError(error, 'Could not close the session'),
+    )
+  }
+
+  function handleDialogPrimary() {
+    const dialogKind = dialog?.kind
+    setDialog(null)
+
+    if (dialogKind === 'end-session') {
+      endSession()
+    } else if (dialogKind === 'start-error') {
+      openSessionAfterLoading()
+    }
   }
 
   return (
@@ -178,8 +230,8 @@ function App() {
       <Header
         isSession={displayedPage === 'session'}
         onAbout={() => setIsAboutOpen(true)}
-        onEndSession={endSession}
-        onHome={displayedPage === 'session' ? endSession : () => goToPage('home')}
+        onEndSession={requestEndSession}
+        onHome={displayedPage === 'session' ? requestEndSession : () => goToPage('home')}
       />
 
       {displayedPage === 'home' && (
@@ -206,7 +258,6 @@ function App() {
           onSelectEnvironment={setEnvironmentId}
           onBack={() => goToPage('upload')}
           onContinue={openSessionAfterLoading}
-          sessionError={sessionError}
         />
       )}
 
@@ -216,6 +267,7 @@ function App() {
           initialTeacherResponse={teacherResponse}
           pdfUrl={pdfUrl}
           onTeacherResponseChange={setTeacherResponse}
+          onError={showError}
         />
       )}
 
@@ -225,6 +277,29 @@ function App() {
 
       {isLoadingSession && (
         <LoadingPopup />
+      )}
+
+      {dialog && (
+        <WarningPopup
+          title={dialog.title}
+          message={dialog.message}
+          primaryLabel={
+            dialog.kind === 'end-session'
+              ? 'Leave'
+              : dialog.kind === 'start-error'
+                ? 'Try again'
+                : 'Got it'
+          }
+          secondaryLabel={
+            dialog.kind === 'end-session'
+              ? 'Stay'
+              : dialog.kind === 'start-error'
+                ? 'Cancel'
+                : undefined
+          }
+          onPrimary={handleDialogPrimary}
+          onSecondary={() => setDialog(null)}
+        />
       )}
     </>
   )
