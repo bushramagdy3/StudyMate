@@ -188,6 +188,8 @@ class TeacherResponse(_Model):
     can_raise_hand: bool = False
     # Show "Summary" at the top of the outline (only the private tutor has it).
     summary_available: bool = False
+    # The quiz at the bottom of the outline unlocks once every topic is completed.
+    quiz_available: bool = False
 
     @model_validator(mode="after")
     def _topics_exist(self) -> "TeacherResponse":
@@ -217,3 +219,94 @@ class TeacherAgent(Protocol):
     def send_event(self, session_id: str, event: StudentEvent) -> TeacherResponse:
         """Handle one student action and return the teacher's next turn."""
         ...
+
+
+# ---------------------------------------------------------------------------
+# The mini quiz (after every topic is completed)
+# ---------------------------------------------------------------------------
+
+
+class QuizRequest(_Model):
+    """The quiz item in the outline.
+
+    "new": write a new quiz. It focuses on the topics the student got wrong
+    (in the last quiz, or during the lecture for the first quiz), plus a few
+    questions on the other topics; with no mistakes it's balanced.
+    "restart": the same questions again, from the start.
+    """
+
+    mode: Literal["new", "restart"] = "new"
+
+
+QuestionKind = Literal["mcq", "text"]  # multiple choice, or a typed answer
+
+
+class QuizQuestion(_Model):
+    """One question, as the student sees it (no answer in it).
+
+    "mcq": pick one of `options`. "text": type the answer (`options` is empty);
+    `code_answer` means the answer is code, so show a code-style box.
+    """
+
+    index: int = Field(ge=0)
+    topic_index: int = Field(ge=0)
+    topic_title: str
+    kind: QuestionKind = "mcq"
+    question: str
+    options: list[str] = Field(default_factory=list, max_length=4)
+    code_answer: bool = False
+
+    @model_validator(mode="after")
+    def _options_match_kind(self) -> "QuizQuestion":
+        if self.kind == "mcq" and len(self.options) < 2:
+            raise ValueError("a multiple-choice question needs at least 2 options")
+        if self.kind == "text" and self.options:
+            raise ValueError("a typed-answer question has no options")
+        return self
+
+
+class Quiz(_Model):
+    session_id: str
+    attempt: int = Field(ge=1)  # 1 for the first quiz, +1 for each new or restarted one
+    questions: list[QuizQuestion] = Field(min_length=1)
+    # The topics this quiz concentrates on (empty when it's balanced).
+    focus_topics: list[Topic] = Field(default_factory=list)
+    # Why the LLM chose this mix of question kinds for this lecture, e.g.
+    # "Mostly typed answers: code is best tested by writing it."
+    style_note: str = ""
+
+
+class QuizAnswers(_Model):
+    """One answer per question, in order: the option index for "mcq", the typed
+    text for "text", or null if left blank."""
+
+    answers: list[int | str | None]
+
+
+class QuizReview(_Model):
+    """How one question went, shown in the results."""
+
+    index: int = Field(ge=0)
+    topic_index: int = Field(ge=0)
+    kind: QuestionKind = "mcq"
+    question: str
+    options: list[str] = Field(default_factory=list)
+    code_answer: bool = False
+    chosen_index: int | None = None  # "mcq": the option picked
+    correct_index: int | None = None  # "mcq": the right option
+    answer_text: str | None = None  # "text": what the student typed
+    expected_answer: str = ""  # "text": a model answer
+    correct: bool
+    feedback: str = ""  # "text": one line on what was right or missing
+    explanation: str
+
+
+class QuizResult(_Model):
+    session_id: str
+    score: int = Field(ge=0)  # correct answers
+    total: int = Field(ge=1)
+    review: list[QuizReview]
+    # Topics with at least one wrong answer; empty when everything was right.
+    topics_to_improve: list[Topic] = Field(default_factory=list)
+    feedback: str  # one or two sentences from Regina
+

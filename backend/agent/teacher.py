@@ -20,14 +20,19 @@ Usage (e.g. from FastAPI):
     response = teacher.start_session(StartSessionRequest(...))
     response = teacher.send_event(response.session_id, ContinueEvent())
     teacher.end_session(response.session_id)   # "end session" button: deletes it
+
+The quiz (after every topic is completed) isn't part of the graph: it doesn't
+change the lecture, so start_quiz() and submit_quiz() keep it next to it.
 """
 
+import random
+import threading
 import uuid
 
 from langgraph.graph import START, StateGraph
 from langgraph.types import Command, interrupt
 
-from agent.contract import StartSessionRequest, StudentEvent, TeacherResponse
+from agent.contract import Quiz, QuizResult, StartSessionRequest, StudentEvent, TeacherResponse
 from agent.explaining import make_explain_node
 from agent.hand_raise import make_answer_student_question_node, raise_hand
 from agent.llm import LLM, get_llm
@@ -46,8 +51,16 @@ from agent.navigation import (
     make_repeat_node,
 )
 from agent.planning import make_plan_node
+from agent.quiz import QuizRecord, answers_problem, mark_quiz, new_quiz, restart_quiz, to_quiz
 from agent.questioning import make_ask_question_node, make_evaluate_answer_node, next_topic
-from agent.state import Mode, TeacherState, initial_state, make_checkpointer, to_response
+from agent.state import (
+    Mode,
+    TeacherState,
+    all_topics_completed,
+    initial_state,
+    make_checkpointer,
+    to_response,
+)
 from agent.summary import after_back_to_lecture, back_to_lecture, can_summarize, make_summary_node
 
 
@@ -200,9 +213,13 @@ def build_graph(llm: LLM, checkpointer=None):
 class Teacher:
     """The teacher agent. Create one and share it across requests."""
 
-    def __init__(self, llm: LLM | None = None, checkpointer=None):
+    def __init__(self, llm: LLM | None = None, checkpointer=None, rng: random.Random | None = None):
+        self.llm = llm or get_llm()
         self.checkpointer = checkpointer or make_checkpointer()
-        self.graph = build_graph(llm or get_llm(), self.checkpointer)
+        self.graph = build_graph(self.llm, self.checkpointer)
+        self.quizzes: dict[str, QuizRecord] = {}  # each session's current quiz
+        self.quiz_lock = threading.Lock()
+        self.rng = rng or random.Random()
 
     def start_session(self, request: StartSessionRequest) -> TeacherResponse:
         """Plan the lecture and return Regina's first turn."""
@@ -225,6 +242,42 @@ class Teacher:
         """The "end session" button: delete the session completely. Nothing is kept."""
         self._state(session_id)  # raises SessionNotFound for an unknown id
         self.checkpointer.delete_thread(session_id)
+        with self.quiz_lock:
+            self.quizzes.pop(session_id, None)
+
+    def start_quiz(self, session_id: str, mode: str = "new") -> Quiz:
+        """The quiz item in the outline: "new" questions, or "restart" the same ones.
+
+        Raises SessionNotFound, or EventNotAllowed before every topic is completed.
+        """
+        state = self._state(session_id)
+        if not all_topics_completed(state):
+            raise EventNotAllowed("The quiz unlocks once every topic is completed")
+        with self.quiz_lock:
+            previous = self.quizzes.get(session_id)
+        if mode == "restart" and previous is not None:
+            record = restart_quiz(previous)
+        else:
+            record = new_quiz(self.llm, state, previous, self.rng)  # LLM call, outside the lock
+        with self.quiz_lock:
+            self.quizzes[session_id] = record
+        return to_quiz(session_id, record, state["outline"])
+
+    def submit_quiz(self, session_id: str, answers: list[int | str | None]) -> QuizResult:
+        """Mark the quiz: score, the right answers, and topics to improve on.
+
+        Typed answers are graded by the LLM (one call). Raises SessionNotFound,
+        or EventNotAllowed if there's no quiz or the answers don't fit the questions.
+        """
+        state = self._state(session_id)
+        with self.quiz_lock:
+            record = self.quizzes.get(session_id)
+        if record is None:
+            raise EventNotAllowed("There's no quiz to submit")
+        problem = answers_problem(record, answers)
+        if problem:
+            raise EventNotAllowed(problem)
+        return mark_quiz(self.llm, session_id, record, answers, state["outline"])  # LLM call, outside the lock
 
     def get_session(self, session_id: str) -> TeacherResponse:
         """The current turn again, without changing anything (e.g. after a page reload)."""

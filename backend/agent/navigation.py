@@ -40,7 +40,8 @@ from agent.state import Mode, TeacherState
 
 
 def can_go_to_topic(state: TeacherState, topic_index: int) -> bool:
-    return state["mode"] != Mode.ENDED and 0 <= topic_index < len(state["outline"])
+    # Also after the lecture has ended, so topics can be replayed around the quiz.
+    return 0 <= topic_index < len(state["outline"])
 
 
 def go_to_topic(state: TeacherState, topic_index: int) -> dict:
@@ -72,7 +73,7 @@ def taught_topics(state: TeacherState) -> set[int]:
 
 def can_repeat(state: TeacherState, topic_index: int) -> bool:
     """For topics the student has been taught (finished, left halfway, or current)."""
-    return state["mode"] != Mode.ENDED and topic_index in taught_topics(state)
+    return topic_index in taught_topics(state)
 
 
 def choose_topic_to_repeat(state: TeacherState, topic_index: int) -> dict:

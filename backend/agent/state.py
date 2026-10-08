@@ -214,7 +214,14 @@ def to_response(state: TeacherState) -> TeacherResponse:
         can_raise_hand=state["mode"] == Mode.EXPLAINING,
         summary_available=get_personality(state["environment"]).offers_summary
         and state["mode"] != Mode.ENDED,
+        quiz_available=all_topics_completed(state),
     )
+
+
+def all_topics_completed(state: TeacherState) -> bool:
+    """The quiz unlocks once every topic in the outline has been completed."""
+    outline = state["outline"]
+    return bool(outline) and set(range(len(outline))) <= set(state["completed_topics"])
 
 
 # Our own types that are stored in the state. LangGraph only reloads saved
