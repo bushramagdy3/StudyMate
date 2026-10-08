@@ -81,6 +81,7 @@ class TeacherState(TypedDict):
     environment: Environment  # picks the personality (Step 4)
     lecture: list[LectureChunk]
     outline: list[OutlineTopic]
+    lecture_summary: list[dict]
 
     # --- where we are in the lecture ---
     current_topic: int | None  # None until the outline exists, and after the end
@@ -118,6 +119,7 @@ def initial_state(session_id: str, request: StartSessionRequest) -> TeacherState
         "environment": request.environment,
         "lecture": request.lecture,
         "outline": [],
+        "lecture_summary": [],
         "current_topic": None,
         "current_slide": request.lecture[0].slide if request.lecture else None,
         "segments": [],
@@ -204,6 +206,7 @@ def to_response(state: TeacherState) -> TeacherResponse:
             Topic(index=i, title=t["title"], summary=t["summary"])
             for i, t in enumerate(state["outline"])
         ],
+        lecture_summary=state.get("lecture_summary", []),
         current_topic=state["current_topic"],
         current_slide=state["current_slide"],
         completed_topics=state["completed_topics"],

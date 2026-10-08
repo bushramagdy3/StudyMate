@@ -8,7 +8,7 @@ real slide content.
 
 from pydantic import BaseModel, Field
 
-from agent.contract import LectureChunk
+from agent.contract import LectureChunk, LectureSummarySection
 from agent.llm import LLM, LLMError, messages
 from agent.personalities import get_personality
 from agent.state import Mode, OutlineTopic, TeacherState
@@ -35,6 +35,10 @@ class PlannedTopic(BaseModel):
 
 class LecturePlan(BaseModel):
     topics: list[PlannedTopic] = Field(min_length=1)
+    lecture_summary: list[LectureSummarySection] = Field(
+        default_factory=list,
+        description="A concise, sectioned revision summary of the entire lecture"
+    )
 
 
 class SlideNote(BaseModel):
@@ -81,7 +85,10 @@ Rules:
 - Topics don't have to match slides: merge slides about the same idea, or split a slide that covers several ideas.
 - Skip slides with no teaching content, such as the title, agenda, "questions?", "thank you" or reference slides.
 - For each topic, list the slide numbers it is taught from in source_slides.
-- Key points must come from the slides. Do not add information that isn't in them."""
+- Key points must come from the slides. Do not add information that isn't in them.
+- Also write lecture_summary as 2 to 4 short revision sections. Each section needs a
+  2-5 word heading and 1 to 3 concise bullet points. Cover the key concepts in order.
+  It is read silently in the student's revision popup, so make it easy to scan."""
 
 
 def lecture_title(lecture: list[LectureChunk]) -> str:
@@ -124,8 +131,25 @@ def intro_speech(
     )
 
 
-def plan_lecture(llm: LLM, lecture: list[LectureChunk]) -> list[OutlineTopic]:
-    """Create the outline. Falls back to a simple slide-based outline if the LLM fails."""
+def fallback_lecture_summary(outline: list[OutlineTopic]) -> list[dict]:
+    """Keep the revision popup useful if the planner cannot make an LLM summary."""
+    sections = [
+        LectureSummarySection(
+            heading=topic["title"],
+            points=[topic["summary"] or ", ".join(topic["key_points"]) or topic["title"]],
+        )
+        for topic in outline
+    ]
+    return [section.model_dump() for section in sections[:4]] or [
+        {"heading": "Lecture overview", "points": ["No revision summary is available yet."]}
+    ]
+
+
+def plan_lecture_with_summary(
+    llm: LLM,
+    lecture: list[LectureChunk],
+) -> tuple[list[OutlineTopic], list[dict]]:
+    """Create the outline and a revision-ready summary in one planning request."""
     try:
         planning_input = lecture
         if sum(len(chunk.text) for chunk in lecture) > MAX_PLANNING_CHARS:
@@ -137,10 +161,18 @@ def plan_lecture(llm: LLM, lecture: list[LectureChunk]) -> list[OutlineTopic]:
         )
         outline = clean_outline(plan, lecture)
         if outline:
-            return outline
+            summary = [section.model_dump() for section in plan.lecture_summary]
+            return outline, summary or fallback_lecture_summary(outline)
     except LLMError:
         pass
-    return fallback_outline(lecture)
+    outline = fallback_outline(lecture)
+    return outline, fallback_lecture_summary(outline)
+
+
+def plan_lecture(llm: LLM, lecture: list[LectureChunk]) -> list[OutlineTopic]:
+    """Create the outline. Kept as a small compatibility wrapper for callers/tests."""
+    outline, _summary = plan_lecture_with_summary(llm, lecture)
+    return outline
 
 
 def clean_outline(plan: LecturePlan, lecture: list[LectureChunk]) -> list[OutlineTopic]:
@@ -241,10 +273,11 @@ def make_plan_node(llm: LLM):
     """The 'plan' node: runs once at the start of a session."""
 
     def plan(state: TeacherState) -> dict:
-        outline = plan_lecture(llm, state["lecture"])
+        outline, lecture_summary = plan_lecture_with_summary(llm, state["lecture"])
         intro = intro_speech(state["lecture"], outline, state["environment"])
         return {
             "outline": outline,
+            "lecture_summary": lecture_summary,
             "current_topic": None,
             "current_slide": state["lecture"][0].slide if state["lecture"] else None,
             "segments": [],

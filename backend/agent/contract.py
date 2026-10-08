@@ -156,6 +156,13 @@ class Topic(_Model):
     summary: str = ""
 
 
+class LectureSummarySection(_Model):
+    """One scannable section in the private tutor's revision recap."""
+
+    heading: str
+    points: list[str] = Field(min_length=1, max_length=3)
+
+
 class TeacherResponse(_Model):
     """What the agent returns after every turn."""
 
@@ -171,6 +178,8 @@ class TeacherResponse(_Model):
     awaiting: Awaiting
     phase: str = ""
     outline: list[Topic]
+    # A concise, sectioned revision recap of the whole lecture.
+    lecture_summary: list[LectureSummarySection] = Field(default_factory=list)
     current_topic: int | None = None  # None before planning or after the end
     current_slide: int | None = None  # The PDF slide/page currently being explained
     completed_topics: list[int] = Field(default_factory=list)

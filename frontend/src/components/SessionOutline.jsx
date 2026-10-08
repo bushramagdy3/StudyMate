@@ -42,13 +42,24 @@ function TopicControlIcon({ kind }) {
   )
 }
 
+function TopicSummaryIcon() {
+  return (
+    <svg className="topic-summary-icon" viewBox="0 0 32 32" aria-hidden="true">
+      <path d="M8 4h12l4 4v20H8z" fill="none" stroke="currentColor" strokeWidth="2.6" />
+      <path d="M20 4v5h5M12 14h8M12 19h8M12 24h5" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="square" />
+    </svg>
+  )
+}
+
 export function SessionOutline({
   completedTopics = [],
   currentTopic,
   disabled = false,
+  onOpenLectureSummary,
   onSelectTopic,
   outline = [],
   pendingTopic = null,
+  showLectureSummary = false,
 }) {
   return (
     <aside className="session-outline" aria-label="Session outline">
@@ -61,26 +72,54 @@ export function SessionOutline({
           const isLoading = pendingTopic === topic.index
 
           return (
-            <button
+            <div
               className={[
                 'session-topic',
                 isActive ? 'active' : '',
                 isCompleted ? 'completed' : '',
                 isLoading ? 'pending' : '',
               ].join(' ')}
-              disabled={disabled}
               key={topic.index}
-              type="button"
-              onClick={() => onSelectTopic(topic.index)}
-              title={`${isCompleted ? 'Replay' : 'Play'} ${topic.title}`}
             >
-              <span>{topic.title}</span>
-              <TopicControlIcon
-                kind={isLoading ? 'loading' : isCompleted ? 'replay' : 'play'}
-              />
-            </button>
+              <button
+                className="session-topic-title"
+                disabled={disabled}
+                type="button"
+                onClick={() => onSelectTopic(topic.index)}
+                title={`${isCompleted ? 'Replay' : 'Play'} ${topic.title}`}
+              >
+                <span>{topic.title}</span>
+              </button>
+
+              <div className="session-topic-actions">
+                <button
+                  className="topic-play-button"
+                  disabled={disabled}
+                  type="button"
+                  onClick={() => onSelectTopic(topic.index)}
+                  title={`${isCompleted ? 'Replay' : 'Play'} ${topic.title}`}
+                  aria-label={`${isCompleted ? 'Replay' : 'Play'} ${topic.title}`}
+                >
+                  <TopicControlIcon
+                    kind={isLoading ? 'loading' : isCompleted ? 'replay' : 'play'}
+                  />
+                </button>
+              </div>
+            </div>
           )
         })}
+
+        {showLectureSummary && (
+          <button
+            className="session-lecture-summary"
+            disabled={disabled}
+            type="button"
+            onClick={onOpenLectureSummary}
+          >
+            <TopicSummaryIcon />
+            <span>Lecture summary</span>
+          </button>
+        )}
       </div>
     </aside>
   )

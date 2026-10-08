@@ -3,6 +3,7 @@ import { sendSessionEvent } from '../api/studyMateApi.js'
 import { MessageBar } from '../components/MessageBar.jsx'
 import { PdfSlideViewer } from '../components/PdfSlideViewer.jsx'
 import { SessionOutline } from '../components/SessionOutline.jsx'
+import { TopicSummaryPopup } from '../components/TopicSummaryPopup.jsx'
 import { playSpeech, playThinkingSpeech, stopSpeech } from '../utils/speechAudio.js'
 
 function statusForAutomaticContinue(phase) {
@@ -46,6 +47,7 @@ export function SessionPage({
   const [subtitle, setSubtitle] = useState('')
   const [isAudioPending, setIsAudioPending] = useState(false)
   const [avatarPosture, setAvatarPosture] = useState('idle')
+  const [isLectureSummaryOpen, setIsLectureSummaryOpen] = useState(false)
   const [displayedSlide, setDisplayedSlide] = useState(
     initialTeacherResponse.current_slide || 1,
   )
@@ -352,9 +354,11 @@ export function SessionPage({
         completedTopics={teacherResponse.completed_topics}
         currentTopic={teacherResponse.current_topic}
         disabled={isBusy || introIsPlaying}
+        onOpenLectureSummary={() => setIsLectureSummaryOpen(true)}
         onSelectTopic={chooseTopic}
         outline={teacherResponse.outline}
         pendingTopic={pendingAction?.topicIndex ?? null}
+        showLectureSummary={environment.id === 'private-tutor'}
       />
 
       <MessageBar
@@ -363,6 +367,18 @@ export function SessionPage({
         disabled={isBusy}
         onRaiseHand={raiseHand}
         onSendMessage={sendMessage}
+      />
+
+      <TopicSummaryPopup
+        topic={
+          isLectureSummaryOpen
+            ? {
+                title: 'Lecture summary',
+                summary: teacherResponse.lecture_summary,
+              }
+            : null
+        }
+        onClose={() => setIsLectureSummaryOpen(false)}
       />
     </main>
   )

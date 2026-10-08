@@ -908,7 +908,6 @@ button {
   background: rgba(33, 22, 20, 0.78);
   border: clamp(2px, 0.2vw, 3px) solid #5d3a30;
   color: var(--cream);
-  cursor: pointer;
   display: flex;
   flex: 0 0 clamp(70px, 9.75vw, 92px);
   font-family: var(--pixel-font);
@@ -916,13 +915,106 @@ button {
   font-weight: 800;
   justify-content: space-between;
   line-height: 1;
-  padding: 0 6% 0 7%;
+  padding: 0 4% 0 7%;
   text-align: left;
   transition:
     background 120ms ease,
     border-color 120ms ease,
     filter 120ms ease,
     transform 120ms ease;
+}
+
+.session-topic-title {
+  background: none;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  flex: 1 1 auto;
+  font: inherit;
+  min-width: 0;
+  padding: 0.8em 0;
+  text-align: left;
+}
+
+.session-topic-title span {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.session-topic-actions {
+  align-items: center;
+  display: flex;
+  flex: 0 0 auto;
+  gap: clamp(5px, 0.55vw, 9px);
+  margin-left: clamp(6px, 0.7vw, 12px);
+}
+
+.topic-play-button {
+  align-items: center;
+  background: none;
+  border: 0;
+  color: var(--cream);
+  cursor: pointer;
+  display: flex;
+  justify-content: center;
+  padding: clamp(3px, 0.25vw, 5px);
+  transition: filter 120ms ease, transform 120ms ease;
+}
+
+.topic-play-button:hover:not(:disabled),
+.session-topic-title:hover:not(:disabled) {
+  filter: brightness(1.2);
+}
+
+.topic-play-button:active:not(:disabled),
+.session-topic-title:active:not(:disabled) {
+  transform: translateY(2px) scale(0.94);
+}
+
+.topic-play-button:disabled,
+.session-topic-title:disabled {
+  cursor: not-allowed;
+}
+
+.topic-summary-icon,
+.topic-control-icon {
+  display: block;
+  height: clamp(24px, 2vw, 34px);
+  width: clamp(24px, 2vw, 34px);
+}
+
+.session-lecture-summary {
+  align-items: center;
+  background: rgba(69, 43, 35, 0.72);
+  border: clamp(2px, 0.2vw, 3px) solid #c9855f;
+  color: var(--cream);
+  cursor: pointer;
+  display: flex;
+  flex: 0 0 clamp(52px, 6.5vw, 68px);
+  font-family: var(--pixel-font);
+  font-size: clamp(15px, 1.15vw, 20px);
+  font-weight: 800;
+  gap: clamp(7px, 0.7vw, 11px);
+  justify-content: center;
+  padding: 0 5%;
+  text-align: center;
+  transition: filter 120ms ease, transform 120ms ease;
+}
+
+.session-lecture-summary:hover:not(:disabled) {
+  filter: brightness(1.18);
+  transform: translateY(-1px);
+}
+
+.session-lecture-summary:active:not(:disabled) {
+  transform: translateY(2px) scale(0.98);
+}
+
+.session-lecture-summary:disabled {
+  cursor: not-allowed;
+  filter: brightness(0.62);
 }
 
 .session-topic.active {
@@ -938,6 +1030,90 @@ button {
   flex: 0 0 auto;
   image-rendering: pixelated;
   width: clamp(28px, 2.35vw, 40px);
+}
+
+.topic-summary-popup {
+  max-height: min(72vh, 650px);
+  width: min(63vw, 940px);
+}
+
+.topic-summary-popup .about-popup-content {
+  display: grid;
+  gap: clamp(7px, 0.7vw, 12px);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  justify-items: center;
+  padding: 7% 9% 6%;
+}
+
+.topic-summary-popup h2 {
+  align-self: end;
+  font-size: clamp(23px, 1.85vw, 32px);
+  margin: 0;
+}
+
+.topic-summary-reading {
+  align-self: stretch;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 3% 0 1%;
+  scrollbar-color: #cf8d65 #271815;
+  scrollbar-width: thin;
+  width: 100%;
+}
+
+.topic-summary-reading::-webkit-scrollbar {
+  width: 8px;
+}
+
+.topic-summary-reading::-webkit-scrollbar-track {
+  background: #271815;
+}
+
+.topic-summary-reading::-webkit-scrollbar-thumb {
+  background: #cf8d65;
+  border: 2px solid #271815;
+}
+
+.topic-summary-reading p {
+  font-size: clamp(16px, 1.2vw, 21px) !important;
+  line-height: 1.48 !important;
+  margin: 0 !important;
+  text-align: left;
+}
+
+.lecture-summary-section + .lecture-summary-section {
+  border-top: 2px solid rgba(216, 155, 112, 0.45);
+  margin-top: clamp(10px, 1vw, 16px);
+  padding-top: clamp(10px, 1vw, 16px);
+}
+
+.lecture-summary-section h3 {
+  color: var(--cream-deep);
+  font-family: var(--pixel-font);
+  font-size: clamp(17px, 1.3vw, 23px);
+  font-weight: 800;
+  line-height: 1.05;
+  margin: 0 0 clamp(6px, 0.55vw, 9px);
+  text-align: left;
+}
+
+.lecture-summary-section ul {
+  display: grid;
+  gap: clamp(5px, 0.45vw, 8px);
+  list-style: square;
+  margin: 0;
+  padding-left: 1.15em;
+}
+
+.lecture-summary-section li {
+  font-size: clamp(16px, 1.2vw, 21px);
+  line-height: 1.42;
+  padding-left: 0.25em;
+}
+
+.topic-summary-popup .got-it-button {
+  align-self: start;
+  margin-top: 0;
 }
 
 .message-bar {
