@@ -143,6 +143,7 @@ function playAudioUrl(audioUrl, shouldRevoke = false, subtitles = null, callback
 
     audio.onended = () => {
       cleanUp()
+      callbacks.onEnd?.()
       resolve()
     }
 
@@ -328,6 +329,6 @@ export function playThinkingSpeech(environmentId, callbacks = {}) {
     getPregeneratedSpeechUrl(environmentId, speech),
     false,
     subtitles,
-    { onStart: callbacks.onStart },
+    { onStart: callbacks.onStart, onEnd: callbacks.onEnd },
   )
 }

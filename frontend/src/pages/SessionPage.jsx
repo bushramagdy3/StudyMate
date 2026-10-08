@@ -123,6 +123,11 @@ export function SessionPage({
       playThinkingSpeech(environment.id, {
         onStart: () => {
           if (token === actionToken.current) {
+            setAvatarPosture('speaking')
+          }
+        },
+        onEnd: () => {
+          if (token === actionToken.current) {
             setAvatarPosture('thinking')
           }
         },
@@ -179,7 +184,11 @@ export function SessionPage({
       onStart: () => {
         if (token === actionToken.current) {
           setIsAudioPending(false)
-          setAvatarPosture(teacherResponse.avatar_state || 'speaking')
+          setAvatarPosture(
+            teacherResponse.avatar_state === 'asking_question'
+              ? 'asking_question'
+              : 'speaking',
+          )
         }
       },
       onSegment: (index, text) => {
