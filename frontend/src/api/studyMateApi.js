@@ -5,6 +5,8 @@ const SESSION_START_TIMEOUT_MS = 180_000
 const SESSION_EVENT_TIMEOUT_MS = 90_000
 const SESSION_READ_TIMEOUT_MS = 30_000
 const SESSION_DELETE_TIMEOUT_MS = 20_000
+const QUIZ_START_TIMEOUT_MS = 90_000
+const QUIZ_SUBMIT_TIMEOUT_MS = 60_000 // typed answers are graded by the LLM
 
 function trackedRequest(externalSignal, timeoutMs, timeoutMessage) {
   const controller = new AbortController()
@@ -161,4 +163,49 @@ export async function deleteSession(sessionId, signal) {
   } finally {
     request.finish()
   }
+}
+
+async function postJson(path, body, signal, timeoutMs, timeoutMessage) {
+  const request = trackedRequest(signal, timeoutMs, timeoutMessage)
+
+  try {
+    const response = await fetch(`${apiBaseUrl}${path}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+      signal: request.controller.signal,
+    })
+
+    return await readJsonResponse(response)
+  } catch (error) {
+    request.throwIfTimedOut(error)
+  } finally {
+    request.finish()
+  }
+}
+
+// mode: 'new' writes new questions (focused on what the student got wrong),
+// 'restart' gives the same questions again.
+export function startQuiz(sessionId, mode, signal) {
+  return postJson(
+    `/api/sessions/${sessionId}/quiz`,
+    { mode },
+    signal,
+    QUIZ_START_TIMEOUT_MS,
+    'Writing the quiz took too long. Please try again.',
+  )
+}
+
+// answers: for each question, the chosen option index (multiple choice) or the
+// typed text (typed answer), or null if left blank.
+export function submitQuiz(sessionId, answers, signal) {
+  return postJson(
+    `/api/sessions/${sessionId}/quiz/answers`,
+    { answers },
+    signal,
+    QUIZ_SUBMIT_TIMEOUT_MS,
+    'Marking the quiz took too long. Please try again.',
+  )
 }
