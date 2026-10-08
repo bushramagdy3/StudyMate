@@ -233,6 +233,7 @@ function App() {
       <BackgroundMusic track={displayedPage === 'session' ? environmentId : 'home'} />
       <Header
         completedTopics={teacherResponse?.completed_topics.length || 0}
+        progress={teacherResponse?.lecture_progress}
         isSession={displayedPage === 'session'}
         onAbout={() => setIsAboutOpen(true)}
         onEndSession={requestEndSession}
