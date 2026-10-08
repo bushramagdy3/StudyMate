@@ -60,9 +60,11 @@ export function SessionPage({
   // The mini quiz: the questions, the marked result, and which view is showing
   // ('loading', 'taking', 'submitting', 'results', 'error'; null = closed).
   const [quiz, setQuiz] = useState(null)
+  const [quizProgress, setQuizProgress] = useState(null)
   const [quizResult, setQuizResult] = useState(null)
   const [quizStatus, setQuizStatus] = useState(null)
   const [quizError, setQuizError] = useState('')
+  const [quizErrorAction, setQuizErrorAction] = useState('retry')
   const quizRequest = useRef(null)
   // What to do on "Try again": the request that failed.
   const failedQuizAction = useRef(null)
@@ -284,6 +286,14 @@ export function SessionPage({
       return
     }
 
+    // Closing the quiz only pauses it. Reopen the exact prepared attempt locally,
+    // including its selected answers and current question, instead of generating it again.
+    if (mode === 'resume' && quiz && quizProgress && !quizResult) {
+      setQuizError('')
+      setQuizStatus('taking')
+      return
+    }
+
     // The quiz covers the lecture, so Regina stops talking.
     actionToken.current += 1
     stopSpeech()
@@ -294,14 +304,20 @@ export function SessionPage({
     const controller = new AbortController()
     quizRequest.current = controller
     failedQuizAction.current = () => openQuiz(mode)
+    setQuizProgress(null)
     setQuizResult(null)
     setQuizError('')
+    setQuizErrorAction('retry')
     setQuizStatus('loading')
 
     try {
       const nextQuiz = await startQuiz(teacherResponse.session_id, mode, controller.signal)
       if (quizRequest.current === controller) {
         setQuiz(nextQuiz)
+        setQuizProgress({
+          current: 0,
+          answers: nextQuiz.questions.map(() => null),
+        })
         setQuizStatus('taking')
       }
     } catch (error) {
@@ -327,7 +343,16 @@ export function SessionPage({
       }
     } catch (error) {
       if (error.name !== 'AbortError' && quizRequest.current === controller) {
+        const isAnswerValidationError = error.status === 409 && /answer|expected/i.test(error.message)
         setQuizError(error.message)
+        setQuizErrorAction(isAnswerValidationError ? 'correct' : 'retry')
+        if (isAnswerValidationError) {
+          // The attempt remains intact; returning to it lets the student correct the input.
+          failedQuizAction.current = () => {
+            setQuizError('')
+            setQuizStatus('taking')
+          }
+        }
         setQuizStatus('error')
       }
     }
@@ -485,6 +510,7 @@ export function SessionPage({
         // Like the topics: not while Regina is mid-lesson or a request is running.
         quizDisabled={isBusy || teacherResponse.awaiting !== 'nothing'}
         quizLoading={quizStatus === 'loading'}
+        quizInProgress={Boolean(quiz && quizProgress && !quizResult && quizStatus === null)}
         quizTaken={quiz !== null}
         onStartQuiz={openQuiz}
       />
@@ -518,10 +544,13 @@ export function SessionPage({
         quiz={quiz}
         result={quizResult}
         status={quizStatus}
+        progress={quizProgress}
+        retryLabel={quizErrorAction === 'correct' ? 'Return to quiz' : 'Try again'}
         onClose={closeQuiz}
         onNewQuiz={() => openQuiz('new')}
         onRetake={() => openQuiz('restart')}
         onRetry={retryQuiz}
+        onProgressChange={setQuizProgress}
         onSubmit={sendQuizAnswers}
       />
     </main>

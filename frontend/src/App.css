@@ -1335,6 +1335,7 @@ button {
   right: 3.2%;
   top: 6.2%;
   width: 5.6%;
+  z-index: 5;
 }
 
 .about-close img {
@@ -1945,6 +1946,291 @@ button {
   text-align: left;
 }
 
+.quiz-review {
+  display: grid;
+  gap: clamp(10px, 0.9vw, 16px);
+}
+
+.quiz-review h3 {
+  margin: 0;
+}
+
+.quiz-review ol {
+  display: grid;
+  gap: clamp(12px, 1vw, 18px);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.quiz-review-item {
+  background: rgba(35, 23, 20, 0.92);
+  border: 2px solid #684237;
+  display: grid;
+  gap: clamp(9px, 0.8vw, 14px);
+  padding: clamp(13px, 1.15vw, 18px);
+}
+
+.quiz-review-item.correct {
+  border-left: 6px solid #83ae6b;
+}
+
+.quiz-review-item.wrong {
+  border-left: 6px solid #df806c;
+}
+
+.quiz-review-heading {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+}
+
+.quiz-review-status,
+.quiz-review-number {
+  font-family: var(--pixel-font);
+  font-size: clamp(12px, 0.9vw, 15px);
+  font-weight: 800;
+  line-height: 1;
+  padding: 0.45em 0.62em;
+  text-shadow: 2px 2px 0 #000;
+}
+
+.quiz-review-number {
+  background: #2a1b18;
+  border: 1px solid #704636;
+  color: #f1d8b9;
+}
+
+.correct .quiz-review-status {
+  background: #42623c;
+  border: 1px solid #91c37b;
+  color: #eff9d9;
+}
+
+.wrong .quiz-review-status {
+  background: #783e39;
+  border: 1px solid #ee9a84;
+  color: #fff0dc;
+}
+
+.quiz-review-mark {
+  display: none;
+}
+
+.quiz-review-question {
+  color: var(--cream);
+  font-family: var(--pixel-font);
+  font-size: clamp(15px, 1.08vw, 19px);
+  font-weight: 800;
+  line-height: 1.42;
+  margin: 0;
+}
+
+.quiz-review-answers {
+  display: grid;
+  gap: 7px;
+}
+
+.quiz-review-line {
+  align-items: start;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(106px, 9vw) minmax(0, 1fr);
+  line-height: 1.42;
+  padding: 0.55em 0.7em;
+}
+
+.quiz-review-line strong,
+.quiz-explanation strong {
+  font-family: var(--pixel-font);
+  font-size: 0.85em;
+  line-height: 1.35;
+}
+
+.student-answer {
+  background: rgba(107, 57, 49, 0.34);
+  color: #ffd2bd;
+}
+
+.correct-answer {
+  background: rgba(66, 98, 60, 0.34);
+  color: #dcf4c9;
+}
+
+.quiz-grader-feedback {
+  background: rgba(88, 62, 43, 0.38);
+  border-left: 3px solid #e5ab70;
+  color: #ffe0b8;
+  margin: 0;
+  padding: 0.55em 0.7em;
+}
+
+.quiz-explanation {
+  background: rgba(33, 25, 21, 0.82);
+  border-left: 3px solid #d69a65;
+  color: #f5ddc2;
+  display: grid;
+  gap: 5px;
+  line-height: 1.45;
+  padding: 0.65em 0.8em;
+}
+
+/* Keep each quiz view self-contained so headers, content, and actions cannot overlap. */
+.quiz-popup .about-popup-content.quiz-content--taking,
+.quiz-popup .about-popup-content.quiz-content--results {
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+
+.quiz-popup .about-popup-content.quiz-content--state {
+  align-items: center;
+  display: flex;
+  justify-content: center;
+}
+
+/* Generating a quiz is a short status moment, not the full question workspace. */
+.quiz-popup--state {
+  height: min(46vh, 420px);
+  width: min(48vw, 650px);
+}
+
+.quiz-question-workspace,
+.quiz-results-workspace {
+  display: grid;
+  gap: clamp(12px, 1vw, 18px);
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 0;
+}
+
+.quiz-header {
+  grid-row: auto;
+  justify-items: center;
+  text-align: center;
+}
+
+.quiz-popup h2 {
+  text-align: center;
+}
+
+.quiz-context {
+  justify-content: center;
+}
+
+.quiz-question-panel {
+  grid-row: auto;
+}
+
+.quiz-actions {
+  grid-row: auto;
+}
+
+.quiz-loading {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(14px, 1.2vw, 20px);
+  justify-content: center;
+  min-height: 100%;
+  position: relative;
+  text-align: center;
+  width: 100%;
+}
+
+.quiz-loading h2,
+.quiz-loading p {
+  margin: 0;
+}
+
+.quiz-loading h2 {
+  left: 0;
+  position: absolute;
+  right: 0;
+  top: 7%;
+}
+
+/* Error actions are part of the centered status stack, not the question footer. */
+.quiz-content--state .quiz-actions {
+  align-self: center;
+  justify-content: center;
+  width: auto;
+}
+
+/* Fixed quiz chrome: only the question/options region is allowed to scroll. */
+.quiz-popup .about-popup-content.quiz-content--taking {
+  display: block;
+  padding: 0;
+  position: relative;
+}
+
+.quiz-content--taking .quiz-question-workspace {
+  bottom: 24%;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(20px, 1.6vw, 28px);
+  left: 9%;
+  min-height: 0;
+  position: absolute;
+  right: 9%;
+  top: 11%;
+}
+
+.quiz-content--taking .quiz-header {
+  flex: 0 0 auto;
+  margin: 0;
+}
+
+.quiz-content--taking .quiz-question-panel {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.quiz-content--taking .quiz-actions {
+  bottom: 7%;
+  left: 9%;
+  position: absolute;
+  right: 9%;
+  justify-content: center;
+}
+
+/* Results use the same fixed chrome as questions: header and actions stay put,
+   while only the review list scrolls. */
+.quiz-popup .about-popup-content.quiz-content--results {
+  display: block;
+  padding: 0;
+  position: relative;
+}
+
+.quiz-content--results .quiz-results-workspace {
+  bottom: 24%;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(16px, 1.3vw, 24px);
+  left: 9%;
+  min-height: 0;
+  position: absolute;
+  right: 9%;
+  top: 11%;
+}
+
+.quiz-content--results .quiz-header {
+  flex: 0 0 auto;
+  margin: 0;
+}
+
+.quiz-content--results .quiz-results-panel {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.quiz-content--results .quiz-actions {
+  bottom: 7%;
+  justify-content: center;
+  left: 9%;
+  position: absolute;
+  right: 9%;
+}
+
 @media (max-width: 720px) {
   .quiz-popup {
     height: min(82vh, 680px);
@@ -1953,6 +2239,11 @@ button {
 
   .quiz-popup .about-popup-content.quiz-content {
     padding: 13% 9% 9%;
+  }
+
+  .quiz-popup--state {
+    height: min(42vh, 390px);
+    width: min(88vw, 560px);
   }
 
   .quiz-actions {

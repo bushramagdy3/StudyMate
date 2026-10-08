@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import closeButton from '../assets/about/close-button.png'
 import popupPanel from '../assets/about/popup-panel.png'
 import loadingIcon from '../assets/generated-icons/outline-loading.gif'
@@ -28,17 +27,18 @@ function PopupButton({ children, disabled = false, onClick }) {
   )
 }
 
-function QuizQuestions({ quiz, isSubmitting, onSubmit }) {
-  const [current, setCurrent] = useState(0)
-  const [answers, setAnswers] = useState(() => quiz.questions.map(() => null))
+function QuizQuestions({ quiz, progress, isSubmitting, onProgressChange, onSubmit }) {
+  const current = progress?.current ?? 0
+  const answers = progress?.answers ?? quiz.questions.map(() => null)
   const question = quiz.questions[current]
   const isLast = current === quiz.questions.length - 1
   const chosen = answers[current]
 
   function setAnswer(value) {
-    setAnswers((previous) =>
-      previous.map((answer, index) => (index === current ? value : answer)),
-    )
+    onProgressChange({
+      current,
+      answers: answers.map((answer, index) => (index === current ? value : answer)),
+    })
   }
 
   function typeInCodeBox(event) {
@@ -63,56 +63,61 @@ function QuizQuestions({ quiz, isSubmitting, onSubmit }) {
 
   return (
     <>
-      <header className="quiz-header">
-        <h2 id="quiz-title">Quiz</h2>
-        <div className="quiz-context">
-          <span className="quiz-progress">Question {current + 1} / {quiz.questions.length}</span>
-          <span className="quiz-topic">{question.topic_title}</span>
-        </div>
-      </header>
-
-      <div className="quiz-question-panel">
-        {/* key: each question pops in like the panels. */}
-        <p className="quiz-question" key={question.index}>
-          {question.question}
-        </p>
-        {question.kind === 'text' ? (
-          <textarea
-            className={question.code_answer ? 'quiz-answer-input code' : 'quiz-answer-input'}
-            // key: a fresh box for each question.
-            key={`answer-${question.index}`}
-            aria-label="Your answer"
-            disabled={isSubmitting}
-            placeholder={question.code_answer ? 'Write your code…' : 'Type your answer…'}
-            rows={question.code_answer ? 6 : 3}
-            spellCheck={!question.code_answer}
-            value={chosen ?? ''}
-            onChange={(event) => setAnswer(event.target.value)}
-            onKeyDown={typeInCodeBox}
-          />
-        ) : (
-          <div className="quiz-options" role="radiogroup" aria-labelledby="quiz-title">
-            {question.options.map((option, optionIndex) => (
-              <button
-                className={chosen === optionIndex ? 'quiz-option selected' : 'quiz-option'}
-                disabled={isSubmitting}
-                key={`${question.index}-${optionIndex}`}
-                role="radio"
-                aria-checked={chosen === optionIndex}
-                type="button"
-                onClick={() => setAnswer(optionIndex)}
-              >
-                <span className="quiz-option-letter">{OPTION_LETTERS[optionIndex]}</span>
-                <span>{option}</span>
-              </button>
-            ))}
+      <div className="quiz-question-workspace">
+        <header className="quiz-header">
+          <h2 id="quiz-title">Quiz</h2>
+          <div className="quiz-context">
+            <span className="quiz-progress">Question {current + 1} / {quiz.questions.length}</span>
+            <span className="quiz-topic">{question.topic_title}</span>
           </div>
-        )}
+        </header>
+
+        <div className="quiz-question-panel">
+          {/* key: each question pops in like the panels. */}
+          <p className="quiz-question" key={question.index}>
+            {question.question}
+          </p>
+          {question.kind === 'text' ? (
+            <textarea
+              className={question.code_answer ? 'quiz-answer-input code' : 'quiz-answer-input'}
+              // key: a fresh box for each question.
+              key={`answer-${question.index}`}
+              aria-label="Your answer"
+              disabled={isSubmitting}
+              placeholder={question.code_answer ? 'Write your code…' : 'Type your answer…'}
+              rows={question.code_answer ? 6 : 3}
+              spellCheck={!question.code_answer}
+              value={chosen ?? ''}
+              onChange={(event) => setAnswer(event.target.value)}
+              onKeyDown={typeInCodeBox}
+            />
+          ) : (
+            <div className="quiz-options" role="radiogroup" aria-labelledby="quiz-title">
+              {question.options.map((option, optionIndex) => (
+                <button
+                  className={chosen === optionIndex ? 'quiz-option selected' : 'quiz-option'}
+                  disabled={isSubmitting}
+                  key={`${question.index}-${optionIndex}`}
+                  role="radio"
+                  aria-checked={chosen === optionIndex}
+                  type="button"
+                  onClick={() => setAnswer(optionIndex)}
+                >
+                  <span className="quiz-option-letter">{OPTION_LETTERS[optionIndex]}</span>
+                  <span>{option}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       <footer className="quiz-actions">
         {current > 0 && (
-          <PopupButton disabled={isSubmitting} onClick={() => setCurrent(current - 1)}>
+          <PopupButton
+            disabled={isSubmitting}
+            onClick={() => onProgressChange({ current: current - 1, answers })}
+          >
             Back
           </PopupButton>
         )}
@@ -124,7 +129,10 @@ function QuizQuestions({ quiz, isSubmitting, onSubmit }) {
             {isSubmitting ? 'Marking…' : 'Submit'}
           </PopupButton>
         ) : (
-          <PopupButton disabled={!isAnswered(chosen)} onClick={() => setCurrent(current + 1)}>
+          <PopupButton
+            disabled={!isAnswered(chosen)}
+            onClick={() => onProgressChange({ current: current + 1, answers })}
+          >
             Next
           </PopupButton>
         )}
@@ -136,14 +144,15 @@ function QuizQuestions({ quiz, isSubmitting, onSubmit }) {
 function QuizResults({ result, onRetake, onNewQuiz, onClose }) {
   return (
     <>
-      <header className="quiz-header">
-        <h2 id="quiz-title">Quiz results</h2>
-        <p className="quiz-score">
-          {result.score} / {result.total} correct
-        </p>
-      </header>
+      <div className="quiz-results-workspace">
+        <header className="quiz-header">
+          <h2 id="quiz-title">Quiz results</h2>
+          <p className="quiz-score">
+            {result.score} / {result.total} correct
+          </p>
+        </header>
 
-      <div className="quiz-results-panel" tabIndex="0">
+        <div className="quiz-results-panel" tabIndex="0">
         <p className="quiz-feedback">{result.feedback}</p>
 
         {result.topics_to_improve.length > 0 && (
@@ -165,38 +174,51 @@ function QuizResults({ result, onRetake, onNewQuiz, onClose }) {
                 className={item.correct ? 'quiz-review-item correct' : 'quiz-review-item wrong'}
                 key={item.index}
               >
+                <div className="quiz-review-heading">
+                  <span className="quiz-review-status">
+                    {item.correct ? 'Correct' : 'Incorrect'}
+                  </span>
+                  <span className="quiz-review-number">Question {item.index + 1}</span>
+                </div>
                 <p className="quiz-review-question">
                   <span className="quiz-review-mark">{item.correct ? '✓' : '✗'}</span>
                   {item.question}
                 </p>
                 {item.kind === 'text' ? (
                   <>
-                    <div className="quiz-review-line">
-                      Your answer:{' '}
+                    <div className="quiz-review-line student-answer">
+                      <strong>Your answer</strong>
                       <AnswerText code={item.code_answer}>{item.answer_text || 'none'}</AnswerText>
                     </div>
                     {item.feedback && <p className="quiz-grader-feedback">{item.feedback}</p>}
-                    <div className="quiz-review-line">
-                      Model answer:{' '}
+                    <div className="quiz-review-line correct-answer">
+                      <strong>Model answer</strong>
                       <AnswerText code={item.code_answer}>{item.expected_answer}</AnswerText>
                     </div>
                   </>
                 ) : (
-                  <>
-                    {!item.correct && (
-                      <p>
-                        Your answer:{' '}
-                        {item.chosen_index === null ? 'none' : item.options[item.chosen_index]}
-                      </p>
-                    )}
-                    <p>Correct answer: {item.options[item.correct_index]}</p>
-                  </>
+                  <div className="quiz-review-answers">
+                    <div className="quiz-review-line student-answer">
+                      <strong>Your answer</strong>
+                      <span>{item.chosen_index === null ? 'No answer' : item.options[item.chosen_index]}</span>
+                    </div>
+                    <div className="quiz-review-line correct-answer">
+                      <strong>Correct answer</strong>
+                      <span>{item.options[item.correct_index]}</span>
+                    </div>
+                  </div>
                 )}
-                {item.explanation && <p className="quiz-explanation">{item.explanation}</p>}
+                {item.explanation && (
+                  <aside className="quiz-explanation">
+                    <strong>Why this matters</strong>
+                    <span>{item.explanation}</span>
+                  </aside>
+                )}
               </li>
             ))}
           </ol>
         </section>
+        </div>
       </div>
 
       <footer className="quiz-actions">
@@ -219,9 +241,18 @@ export function QuizPopup({
   onNewQuiz,
   onRetake,
   onRetry,
+  progress,
+  onProgressChange,
+  retryLabel = 'Try again',
   onSubmit,
 }) {
   if (!status) return null
+
+  const contentMode = status === 'loading' || status === 'error'
+    ? 'state'
+    : status === 'results'
+      ? 'results'
+      : 'taking'
 
   let content
   if (status === 'loading') {
@@ -238,7 +269,7 @@ export function QuizPopup({
         <h2 id="quiz-title">Quiz</h2>
         <p>{error || 'Something went wrong with the quiz.'}</p>
         <footer className="quiz-actions">
-          <PopupButton onClick={onRetry}>Try again</PopupButton>
+          <PopupButton onClick={onRetry}>{retryLabel}</PopupButton>
           <PopupButton onClick={onClose}>Close</PopupButton>
         </footer>
       </div>
@@ -253,7 +284,9 @@ export function QuizPopup({
         // A new or restarted quiz starts again from the first question, with no answers.
         key={quiz.attempt}
         quiz={quiz}
+        progress={progress}
         isSubmitting={status === 'submitting'}
+        onProgressChange={onProgressChange}
         onSubmit={onSubmit}
       />
     )
@@ -262,7 +295,7 @@ export function QuizPopup({
   return (
     <div className="modal-backdrop" role="presentation">
       <section
-        className="about-popup topic-summary-popup quiz-popup"
+        className={`about-popup topic-summary-popup quiz-popup quiz-popup--${contentMode}`}
         style={{ backgroundImage: `url(${popupPanel})` }}
         role="dialog"
         aria-modal="true"
@@ -272,7 +305,9 @@ export function QuizPopup({
           <img src={closeButton} alt="" />
         </button>
 
-        <div className="about-popup-content quiz-content">{content}</div>
+        <div className={`about-popup-content quiz-content quiz-content--${contentMode}`}>
+          {content}
+        </div>
       </section>
     </div>
   )

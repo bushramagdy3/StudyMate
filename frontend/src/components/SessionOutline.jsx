@@ -48,6 +48,7 @@ export function SessionOutline({
   showLectureSummary = false,
   quizAvailable = false,
   quizDisabled = false,
+  quizInProgress = false,
   quizLoading = false,
   quizTaken = false,
   onStartQuiz,
@@ -57,12 +58,16 @@ export function SessionOutline({
   // Like the topics: the name gives the same quiz again, the replay icon new questions.
   const quizTitleLabel = quizLocked
     ? 'Complete every topic to unlock the quiz'
-    : quizTaken
+    : quizInProgress
+      ? 'Resume quiz'
+      : quizTaken
       ? 'Retake the same quiz'
       : 'Start the quiz'
   const quizIconLabel = quizLocked
     ? quizTitleLabel
-    : quizTaken
+    : quizInProgress
+      ? 'Resume quiz'
+      : quizTaken
       ? 'New quiz questions'
       : 'Start the quiz'
 
@@ -140,7 +145,7 @@ export function SessionOutline({
             className="session-topic-title"
             disabled={quizButtonDisabled}
             type="button"
-            onClick={() => onStartQuiz(quizTaken ? 'restart' : 'new')}
+            onClick={() => onStartQuiz(quizInProgress ? 'resume' : quizTaken ? 'restart' : 'new')}
             title={quizTitleLabel}
           >
             <span>Quiz</span>
@@ -154,7 +159,7 @@ export function SessionOutline({
               className="topic-play-button"
               disabled={quizButtonDisabled}
               type="button"
-              onClick={() => onStartQuiz('new')}
+              onClick={() => onStartQuiz(quizInProgress ? 'resume' : 'new')}
               title={quizIconLabel}
               aria-label={quizIconLabel}
             >

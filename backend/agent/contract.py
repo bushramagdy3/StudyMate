@@ -12,7 +12,7 @@ Conventions:
 from enum import Enum
 from typing import Annotated, Literal, Protocol, Union
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictInt, StrictStr, model_validator
 
 
 class _Model(BaseModel):
@@ -280,7 +280,9 @@ class QuizAnswers(_Model):
     """One answer per question, in order: the option index for "mcq", the typed
     text for "text", or null if left blank."""
 
-    answers: list[int | str | None]
+    # Keep a typed value such as "1" as text. It must not be coerced into an
+    # option index before the quiz checker sees the question kind.
+    answers: list[StrictInt | StrictStr | None]
 
 
 class QuizReview(_Model):
