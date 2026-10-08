@@ -95,6 +95,13 @@ Events sent at the wrong time are rejected (HTTP 409) and change nothing.
   (while the teacher is explaining). `raise_hand` is ignored at other times.
 - **quiz_available**: `true` once every topic is in `completed_topics`. Until
   then the "Quiz" item at the bottom of the outline is locked.
+- **lecture_progress**: 0.0 to 1.0, for the progress bar (shown as a %). Finished
+  topics count fully; a topic in progress counts by how much of it was said.
+  It only reaches 1.0 once every topic is finished.
+- **speech_rate**: play the speech at this speed (`audio.playbackRate`). While
+  explaining, Regina paces each topic: 0.9 for deep or brand-new concepts
+  (`"slow"`, which also gets more, smaller steps), 1.1 for intuitive or familiar
+  ones (`"quick"`, fewer steps), otherwise 1.0. Always 1.0 outside explanations.
 
 ## 3b. The mini quiz
 
