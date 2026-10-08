@@ -252,3 +252,13 @@ def test_closing_fallback_when_llm_fails():
     assert update["speech"] == ["You have reached the end of the lecture. It's worth reviewing Pipelining. Take a moment to collect the key ideas; the quiz is next."]
     assert update["mode"] is Mode.ENDED
     assert fallback_closing(make_state()) == "You have reached the end of the lecture. Take a moment to collect the key ideas; the quiz is next."
+
+
+def test_the_pace_is_saved_and_restored_with_the_topic():
+    state = make_state(segment_index=1, pace="slow")
+    away = state | go_to_topic(state, 2)
+    assert away["topic_progress"][0]["pace"] == "slow"
+    assert away["pace"] == "normal"  # a new topic: the explain node sets its pace
+    back = away | {"segments": ["t2"], "question_points": [1], "pace": "quick"}
+    back = back | go_to_topic(back, 0)
+    assert back["pace"] == "slow"

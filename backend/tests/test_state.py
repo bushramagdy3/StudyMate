@@ -98,3 +98,47 @@ def test_summary_is_available_only_for_the_tutor():
     assert not to_response(tutor | {"mode": Mode.ENDED}).summary_available
     cafe = initial_state("abc", StartSessionRequest(environment=Environment.CAFE, lecture=REQUEST.lecture))
     assert not to_response(cafe | {"outline": [TOPIC], "current_topic": 0}).summary_available
+
+
+# --- lecture progress and speech rate -------------------------------------------
+
+FOUR_TOPICS = [TOPIC | {"title": f"Topic {n}"} for n in range(4)]
+
+
+def progress_state(**fields):
+    return initial_state("abc", REQUEST) | {"outline": FOUR_TOPICS, "mode": Mode.WAITING_TOPIC} | fields
+
+
+def test_progress_counts_finished_topics():
+    assert to_response(progress_state()).lecture_progress == 0
+    assert to_response(progress_state(completed_topics=[0, 2])).lecture_progress == 0.5
+    assert to_response(progress_state(completed_topics=[0, 1, 2, 3])).lecture_progress == 1
+
+
+def test_progress_counts_how_much_of_the_current_topic_was_said():
+    state = progress_state(
+        completed_topics=[0, 1, 2],
+        current_topic=3,
+        segments=["a", "b", "c", "d"],
+        segment_index=2,  # half of topic 3 said
+        mode=Mode.EXPLAINING,
+    )
+    assert to_response(state).lecture_progress == 0.875  # (3 + 0.5) / 4
+
+
+def test_progress_counts_topics_left_halfway():
+    saved = {"segments": ["a", "b"], "question_points": [2], "segment_index": 1}
+    assert to_response(progress_state(topic_progress={1: saved})).lecture_progress == 0.125
+
+
+def test_an_unfinished_topic_never_shows_as_complete():
+    state = progress_state(current_topic=0, segments=["a", "b"], segment_index=2, mode=Mode.FEEDBACK)
+    assert to_response(state).lecture_progress < 0.25
+
+
+@pytest.mark.parametrize("pace, rate", [("slow", 0.9), ("normal", 1.0), ("quick", 1.1)])
+def test_speech_rate_follows_the_pace_while_explaining(pace, rate):
+    state = progress_state(current_topic=0, segments=["a"], mode=Mode.EXPLAINING, pace=pace, speech=["a"])
+    assert to_response(state).speech_rate == rate
+    # Questions, feedback and other talk are always at normal speed.
+    assert to_response(state | {"mode": Mode.FEEDBACK}).speech_rate == 1.0

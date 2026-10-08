@@ -12,6 +12,7 @@ from agent.explaining import (
     explain_prompt,
     fallback_segments,
     fit_segments,
+    generate_explanation,
     generate_segments,
     make_explain_node,
     next_stop,
@@ -46,14 +47,17 @@ def make_state(environment=Environment.LECTURE_HALL, topic=0, **fields):
     return state | {"outline": OUTLINE, "current_topic": topic} | fields
 
 
-def fake_llm(segments=None, question_after=None, status=200):
+def fake_llm(segments=None, question_after=None, status=200, pace=None):
     sent = []
 
     def handler(request):
         sent.append(json.loads(request.content))
         if status != 200:
             return httpx.Response(status)
-        content = json.dumps({"segments": segments, "question_after": question_after or []})
+        reply = {"segments": segments, "question_after": question_after or []}
+        if pace:
+            reply["pace"] = pace
+        content = json.dumps(reply)
         return httpx.Response(200, json={"choices": [{"message": {"content": content}}]})
 
     return LLM("key", "model", transport=httpx.MockTransport(handler)), sent
@@ -114,27 +118,29 @@ def test_prompt_uses_personality_and_slides_without_a_second_introduction():
     assert "Head-of-line" not in user
     assert "Do not greet the student or introduce yourself again" in user
     assert "This is the very start of the lecture" not in user
-    assert "exactly 4 segments" in user
-    assert "exactly 2 segment number(s) between 1 and 4" in user
+    assert "as 3 to 8 segments" in user  # professor: 4 normally, 3 quick, up to 8 slow
+    assert "exactly 2 segment number(s)" in user
 
 
 def test_later_topics_connect_to_covered_ones_without_greeting():
     state = make_state(topic=1, completed_topics=[0], history=[{"role": "teacher", "text": "Hi"}])
     prompt = explain_prompt(state)
-    assert "Already covered: Pipelining" in prompt
+    assert "Already taught" in prompt
+    assert "- Pipelining: several requests at once" in prompt  # its terms count as known
     assert "greeting" not in prompt
 
 
 def test_jumping_ahead_doesnt_count_skipped_topics_as_covered():
     prompt = explain_prompt(make_state(topic=1, history=[{"role": "teacher", "text": "Hi"}]))
-    assert "Already covered" not in prompt
+    assert "Already taught" not in prompt
 
 
 def test_going_back_to_the_first_topic_doesnt_greet_again():
     state = make_state(topic=0, completed_topics=[0, 1], history=[{"role": "teacher", "text": "Hi"}])
     prompt = explain_prompt(state)
     assert "greeting" not in prompt
-    assert "Already covered: Head-of-Line Blocking" in prompt
+    assert "- Head-of-Line Blocking: responses come back in order" in prompt
+    assert "- Pipelining" not in prompt  # the topic being taught isn't "already taught"
 
 
 def test_repeat_asks_for_a_different_explanation():
@@ -228,3 +234,55 @@ def test_explanation_response_pairs_each_played_segment_with_a_slide():
     assert update["speech"] == ["first", "second"]
     assert update["speech_slides"] == [2, 2]
     assert update["segment_slides"] == [2, 2, 3, 3, 3]
+
+
+# --- pacing -------------------------------------------------------------------
+
+
+def test_prompt_asks_the_llm_to_pace_the_topic():
+    prompt = explain_prompt(make_state())
+    assert '"slow": a deep or abstract concept' in prompt
+    assert "Define each new term" in prompt
+    assert '"quick": intuitive' in prompt
+
+
+def test_slow_topics_can_be_longer_than_normal():
+    eight = [f"Idea {n}." for n in range(8)]
+    llm, _ = fake_llm(eight, [4, 8], pace="slow")
+    segments, points, pace = generate_explanation(llm, make_state())  # professor: up to 8
+    assert pace == "slow"
+    assert len(segments) == 8 and points == [4, 8]
+
+
+def test_too_many_segments_are_merged_at_the_maximum():
+    llm, _ = fake_llm([f"Idea {n}." for n in range(12)], [4, 12], pace="slow")
+    segments, _, _ = generate_explanation(llm, make_state(environment=Environment.CAFE))  # up to 6
+    assert len(segments) == 12  # 6 groups, the last holding 7 sentences split for playback
+    assert segments[-1] == "Idea 11."
+
+
+def test_quick_topics_can_be_short():
+    llm, _ = fake_llm(["One.", "Two."], [1, 2], pace="quick")
+    segments, points, pace = generate_explanation(llm, make_state())
+    assert (segments, points, pace) == (["One.", "Two."], [1, 2], "quick")
+
+
+def test_a_repeat_is_never_quick():
+    llm, _ = fake_llm(["One.", "Two."], [1, 2], pace="quick")
+    _, _, pace = generate_explanation(llm, make_state(), previous=["old"])
+    assert pace == "normal"
+    assert "don't choose the" in explain_prompt(make_state(), previous=["old"])
+
+
+def test_missing_pace_and_llm_failure_are_normal():
+    llm, _ = fake_llm(["One.", "Two."], [1, 2])
+    assert generate_explanation(llm, make_state())[2] == "normal"
+    llm, _ = fake_llm(status=503)
+    assert generate_explanation(llm, make_state())[2] == "normal"
+
+
+def test_explain_node_remembers_the_pace():
+    llm, _ = fake_llm(["One.", "Two."], [1, 2], pace="slow")
+    update = make_explain_node(llm)(make_state())
+    assert update["pace"] == "slow"
+
