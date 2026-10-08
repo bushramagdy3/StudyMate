@@ -522,8 +522,8 @@ export function SessionPage({
           data-pdf-slide-slot
         >
           <PdfSlideViewer
-            // The tutor's laptop is narrow: fill its width and scroll down the page.
-            fitWidth={environment.id === 'private-tutor'}
+            // Fill the screen's width and scroll down the page, so a tall A4 page stays readable.
+            fitWidth
             pdfUrl={pdfUrl}
             slideNumber={currentSlide}
             topicTitle={currentTopic?.title}
