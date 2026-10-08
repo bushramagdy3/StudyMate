@@ -817,16 +817,17 @@ button {
 }
 
 .private-tutor .session-avatar {
-  left: 65.8%;
-  top: 25%;
-  width: 17.2%;
+  left: 63.5%;
+  top: 26%;
+  width: 20%;
 }
 
 .study-cafe .session-avatar {
-  /* In the cafe Regina is intentionally foreground scale, beside the laptop. */
-  left: 64.5%;
-  top: 28%;
-  width: 27.5%;
+  /* Anchor every pose to the cafe floor, not a posture-dependent top offset. */
+  bottom: 0%;
+  left: 40%;
+  top: auto;
+  width: 60%;
 }
 
 .lecture-hall .pdf-slide-slot {
