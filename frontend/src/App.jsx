@@ -17,6 +17,7 @@ import { HomePage } from './pages/HomePage.jsx'
 import { SessionPage } from './pages/SessionPage.jsx'
 import { UploadPdfPage } from './pages/UploadPdfPage.jsx'
 import { stopSpeech } from './utils/speechAudio.js'
+import { useButtonClickSound } from './utils/useButtonClickSound.js'
 
 const pages = new Set(['home', 'upload', 'choose', 'session'])
 
@@ -39,6 +40,7 @@ function getInitialEnvironmentId() {
 }
 
 function App() {
+  useButtonClickSound()
   const [page, setPage] = useState(getInitialPage)
   const [isAboutOpen, setIsAboutOpen] = useState(false)
   const [isLoadingSession, setIsLoadingSession] = useState(false)
