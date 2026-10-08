@@ -46,9 +46,10 @@ Every student action is sent as one event, told apart by `type`.
 
 **End session** isn't an event: the backend calls `teacher.end_session(session_id)`,
 which deletes the session (nothing is saved), and the frontend goes to the homepage.
-When the student finishes the last topic, Regina says a short goodbye and `awaiting`
+When the student finishes the last topic, Regina says the quiz is next and `awaiting`
 becomes `"nothing"`. If the student made any mistakes (even if they got the answer
-right on the retry), she names those topics to review.
+right on the retry), she names those topics to review. Topics can still be clicked
+(and repeated) after that, e.g. to revise before the quiz.
 
 Events sent at the wrong time are rejected (HTTP 409) and change nothing.
 
@@ -92,6 +93,93 @@ Events sent at the wrong time are rejected (HTTP 409) and change nothing.
   is `true` (private tutor, until the lecture ends).
 - **can_raise_hand**: show the raise-hand button only when this is `true`
   (while the teacher is explaining). `raise_hand` is ignored at other times.
+- **quiz_available**: `true` once every topic is in `completed_topics`. Until
+  then the "Quiz" item at the bottom of the outline is locked.
+
+## 3b. The mini quiz
+
+5 to 10 questions. It isn't a student event: it has its own two routes and
+doesn't change the lecture.
+
+Each question is `"mcq"` (pick one of up to 4 `options`) or `"text"` (type the
+answer; `code_answer: true` means the answer is code, so show a monospace box).
+**The LLM picks the kind of each question to suit the lecture**: mostly mcq for
+fact/concept subjects (e.g. biology), a balance for languages, mostly text for
+programming. It explains its choice in `style_note`, shown to the student.
+
+| Route | Body | Returns |
+|---|---|---|
+| `POST /api/sessions/{id}/quiz` | `{"mode": "new"}` or `{"mode": "restart"}` | a `Quiz` |
+| `POST /api/sessions/{id}/quiz/answers` | `{"answers": [0, 2, null, ...]}` | a `QuizResult` |
+
+- **new**: new questions (the replay icon). The first quiz focuses on the topics
+  the student got wrong during the lecture (2 questions each, 1 on every other
+  topic); later ones focus on the topics missed in the last quiz. No mistakes:
+  balanced over all topics. Earlier questions aren't repeated.
+- **restart**: the same questions again (the quiz's name). Before any quiz,
+  it writes a new one.
+- **answers**: one per question, in order: the option index for `"mcq"`, the typed
+  text for `"text"`, `null` = blank. Typed answers are graded by the LLM in one
+  call (by meaning, not wording); if that fails, by matching key words. So
+  submitting can take a few seconds when there are typed answers.
+
+```json
+{
+  "session_id": "abc123",
+  "attempt": 1,
+  "focus_topics": [{ "index": 1, "title": "Head-of-Line Blocking", "summary": "..." }],
+  "style_note": "Mostly multiple choice: this lecture is about telling concepts apart.",
+  "questions": [
+    {
+      "index": 0,
+      "topic_index": 1,
+      "topic_title": "Head-of-Line Blocking",
+      "kind": "mcq",
+      "question": "Why does one slow response delay the others?",
+      "options": ["...", "...", "...", "..."],
+      "code_answer": false
+    },
+    {
+      "index": 1,
+      "topic_index": 2,
+      "topic_title": "Multiplexing",
+      "kind": "text",
+      "question": "In one sentence: what does multiplexing allow?",
+      "options": [],
+      "code_answer": false
+    }
+  ]
+}
+```
+
+The answers aren't in the `Quiz`; they come back in the `QuizResult`:
+
+```json
+{
+  "session_id": "abc123",
+  "score": 3,
+  "total": 5,
+  "feedback": "Nice work. Focus on Head-of-Line Blocking: ...",
+  "topics_to_improve": [{ "index": 1, "title": "Head-of-Line Blocking", "summary": "..." }],
+  "review": [
+    {
+      "index": 0, "topic_index": 1, "kind": "mcq", "question": "...", "options": ["..."],
+      "chosen_index": 2, "correct_index": 0, "correct": false,
+      "explanation": "Why the correct option is right."
+    },
+    {
+      "index": 1, "topic_index": 2, "kind": "text", "question": "...", "options": [],
+      "answer_text": "What the student typed", "expected_answer": "A model answer",
+      "correct": true, "feedback": "One line from the grader.",
+      "explanation": "Why the model answer is right."
+    }
+  ]
+}
+```
+
+409 if the quiz is still locked, if there's no quiz to submit, or if the
+answers don't fit the questions (wrong count, text for an mcq, a number for a
+text question).
 
 ## 4. The agent's Python interface
 
@@ -107,6 +195,8 @@ teacher.start_session(request: StartSessionRequest) -> TeacherResponse
 teacher.send_event(session_id: str, event: StudentEvent) -> TeacherResponse
 teacher.get_session(session_id: str) -> TeacherResponse  # current turn again, changes nothing
 teacher.end_session(session_id: str) -> None             # "end session" button: deletes it
+teacher.start_quiz(session_id: str, mode: str = "new") -> Quiz         # "new" or "restart"
+teacher.submit_quiz(session_id: str, answers: list[int | str | None]) -> QuizResult
 ```
 
 Errors, and the HTTP status to return for them:
@@ -114,6 +204,6 @@ Errors, and the HTTP status to return for them:
 | Exception | Meaning | HTTP |
 |---|---|---|
 | `SessionNotFound` | wrong `session_id`, or the server restarted | 404 |
-| `EventNotAllowed` | event sent at the wrong time; nothing changed | 409 |
+| `EventNotAllowed` | event (or quiz call) at the wrong time; nothing changed | 409 |
 
 Sessions are kept in memory: restarting the server ends them.
