@@ -111,6 +111,10 @@ function playAudioUrl(audioUrl, shouldRevoke = false, subtitles = null, callback
 
   return new Promise((resolve, reject) => {
     const audio = new Audio(audioUrl)
+    // Slower for deep or new concepts, a little faster for easy ones (speech_rate).
+    // The browser keeps the voice's pitch natural at these speeds.
+    audio.playbackRate = callbacks.rate || 1
+    audio.preservesPitch = true
     currentAudio = audio
 
     if (subtitles) {
@@ -237,6 +241,7 @@ export async function playSpeech(speech, environmentId, callbacks = {}) {
   const onError = typeof callbacks === 'function'
     ? () => {}
     : callbacks.onError || (() => {})
+  const rate = typeof callbacks === 'function' ? 1 : callbacks.rate || 1
 
   // Hide the previous subtitle until this speech's audio starts playing.
   onSegment(0, '')
@@ -302,7 +307,7 @@ export async function playSpeech(speech, environmentId, callbacks = {}) {
       () => onSegment(segments[index].sourceIndex, ''),
     )
     try {
-      await playAudioUrl(audioUrl, true, subtitles, { onStart })
+      await playAudioUrl(audioUrl, true, subtitles, { onStart, rate })
     } catch (error) {
       onError(error)
       throw error
