@@ -67,9 +67,9 @@ def no_retry_wait(monkeypatch):
 # --- clicking a topic's name -------------------------------------------------
 
 
-def test_topic_can_be_clicked_any_time_during_the_lecture():
+def test_topic_can_be_clicked_any_time_even_after_the_lecture():
     for mode in Mode:
-        assert can_go_to_topic(make_state(mode=mode), 2) is (mode is not Mode.ENDED)
+        assert can_go_to_topic(make_state(mode=mode), 2)
     assert not can_go_to_topic(make_state(), 3)
     assert not can_go_to_topic(make_state(), -1)
 
@@ -124,7 +124,7 @@ def test_repeat_only_for_taught_topics():
     assert can_repeat(state, 0)
     assert can_repeat(state, 1)
     assert not can_repeat(state, 2)
-    assert not can_repeat(make_state(mode=Mode.ENDED), 0)
+    assert can_repeat(make_state(mode=Mode.ENDED, completed_topics=[0]), 0)  # replay around the quiz
 
 
 def test_repeat_the_current_topic_reprompts_with_the_old_explanation():

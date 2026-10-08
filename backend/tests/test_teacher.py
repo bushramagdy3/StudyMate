@@ -155,7 +155,8 @@ def test_a_whole_lecture_uses_manual_topic_selection(teacher):
     waiting = send(ContinueEvent())
     assert waiting.current_topic is None
     assert waiting.completed_topics == [0]
-    assert waiting.speech == []
+    assert "Next, we will explore Head-of-Line Blocking" in waiting.speech[0]
+    assert not waiting.quiz_available  # a topic is still left
 
     topic2 = send(GoToTopicEvent(topic_index=1))
     assert topic2.current_topic == 1
@@ -167,6 +168,7 @@ def test_a_whole_lecture_uses_manual_topic_selection(teacher):
     assert done.current_topic is None
     assert done.completed_topics == [0, 1]
     assert done.awaiting is Awaiting.NOTHING
+    assert done.quiz_available
 
 
 def test_two_wrong_answers_reveal_then_wait_for_outline(teacher):

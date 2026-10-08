@@ -41,14 +41,15 @@ def test_feedback_kind(correct, attempts, expected):
     "mode, avatar, awaiting",
     [
         (Mode.INTRO, AvatarState.SPEAKING, Awaiting.CONTINUE),
-        (Mode.WAITING_TOPIC, AvatarState.IDLE, Awaiting.NOTHING),
+        # Waiting / ended still speak the "next topic" or "quiz is next" line.
+        (Mode.WAITING_TOPIC, AvatarState.SPEAKING, Awaiting.NOTHING),
         (Mode.EXPLAINING, AvatarState.SPEAKING, Awaiting.CONTINUE),
         (Mode.FEEDBACK, AvatarState.SPEAKING, Awaiting.CONTINUE),
         (Mode.ANSWERING_STUDENT, AvatarState.SPEAKING, Awaiting.CONTINUE),
         (Mode.SUMMARIZING, AvatarState.SPEAKING, Awaiting.CONTINUE),
         (Mode.AWAITING_ANSWER, AvatarState.ASKING_QUESTION, Awaiting.ANSWER),
         (Mode.AWAITING_STUDENT_QUESTION, AvatarState.LISTENING, Awaiting.QUESTION),
-        (Mode.ENDED, AvatarState.IDLE, Awaiting.NOTHING),
+        (Mode.ENDED, AvatarState.SPEAKING, Awaiting.NOTHING),
     ],
 )
 def test_to_response_maps_mode(mode, avatar, awaiting):
