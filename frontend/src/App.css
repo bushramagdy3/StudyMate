@@ -1572,6 +1572,52 @@ button {
   transform: translateY(2px) scale(0.98);
 }
 
+/* Pause button: top right of the stage while Regina speaks. Same pixel
+   button look as the music toggle. */
+.speech-pause-button {
+  align-items: center;
+  animation: panel-pop 220ms steps(5, end) both;
+  background: linear-gradient(180deg, #4a302a, #30201c);
+  border: 3px solid #d08b62;
+  box-shadow: 0 0 0 2px #120d0b, inset 0 0 0 2px rgba(255, 205, 156, 0.12);
+  color: var(--cream);
+  cursor: pointer;
+  display: flex;
+  font-family: var(--pixel-font);
+  font-size: clamp(15px, 1.2vw, 20px);
+  font-weight: 800;
+  gap: clamp(5px, 0.5vw, 8px);
+  height: clamp(40px, 3.5vw, 52px);
+  padding: 0 clamp(10px, 1vw, 16px);
+  position: absolute;
+  right: 1.6%;
+  text-shadow: 2px 2px 0 #000;
+  top: 3%;
+  transition: filter 120ms ease, transform 120ms ease;
+  z-index: 7;
+}
+
+.speech-pause-button:hover {
+  filter: brightness(1.12);
+  transform: translateY(-1px);
+}
+
+.speech-pause-button:active {
+  transform: translateY(2px) scale(0.98);
+}
+
+.speech-pause-button.paused {
+  border-color: #f0aa78;
+  color: #f0aa78;
+}
+
+.speech-pause-icon {
+  flex: 0 0 auto;
+  height: 22px;
+  image-rendering: pixelated;
+  width: 22px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -1598,6 +1644,45 @@ button {
   display: block;
   max-height: 100%;
   max-width: 100%;
+}
+
+/* Fit to width (private tutor): the page fills the laptop screen's width and
+   scrolls vertically. Auto margins centre a short (landscape) page but never
+   push a tall one out of reach. */
+.pdf-slide-canvas-wrap.fit-width {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-color: #cf8d65 #271815;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+}
+
+.pdf-slide-canvas-wrap.fit-width .pdf-slide-canvas {
+  flex: 0 0 auto;
+  margin: auto 0;
+  max-height: none;
+}
+
+.pdf-slide-canvas-wrap.fit-width::-webkit-scrollbar {
+  width: 8px;
+}
+
+.pdf-slide-canvas-wrap.fit-width::-webkit-scrollbar-track {
+  background: #271815;
+}
+
+.pdf-slide-canvas-wrap.fit-width::-webkit-scrollbar-thumb {
+  background: #cf8d65;
+  border: 2px solid #271815;
+}
+
+.pdf-slide-canvas-wrap.fit-width:focus-visible {
+  outline: 3px solid #f0aa78;
+  outline-offset: -3px;
 }
 
 .pdf-slide-loading,
