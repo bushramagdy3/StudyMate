@@ -368,6 +368,8 @@ async def process_pdf_upload(pdf: UploadFile) -> list[LectureChunk]:
 FISH_TTS_URL = "https://api.fish.audio/v1/tts"
 FISH_VOICE_ID = "bddf65d5a84c4a9aa36b7136bdac57a9"  # Women KatKat
 FISH_MODEL = "s2.1-pro-free"
+FISH_TTS_TIMEOUT_SECONDS = 20.0
+FISH_TTS_MAX_ATTEMPTS = 2
 
 
 def fish_audio_api_key() -> str:
@@ -405,26 +407,38 @@ async def generate_speech_audio(
         "latency": "balanced",
     }
 
+    response: httpx.Response | None = None
     async with httpx.AsyncClient(
-        timeout=60.0,
+        timeout=FISH_TTS_TIMEOUT_SECONDS,
         transport=transport,
     ) as client:
-        try:
-            response = await client.post(
-                FISH_TTS_URL,
-                headers=headers,
-                json=payload,
-            )
-        except httpx.HTTPError as error:
-            raise HTTPException(
-                status_code=502,
-                detail=f"Fish Audio TTS could not be reached: {error}",
-            ) from error
+        for attempt in range(FISH_TTS_MAX_ATTEMPTS):
+            try:
+                response = await client.post(
+                    FISH_TTS_URL,
+                    headers=headers,
+                    json=payload,
+                )
+            except httpx.HTTPError as error:
+                if attempt + 1 == FISH_TTS_MAX_ATTEMPTS:
+                    raise HTTPException(
+                        status_code=502,
+                        detail=f"Fish Audio TTS could not be reached: {error}",
+                    ) from error
 
-    if response.status_code != 200:
+                await asyncio.sleep(1)
+                continue
+
+            if response.status_code not in {429, 500, 502, 503, 504}:
+                break
+
+            if attempt + 1 < FISH_TTS_MAX_ATTEMPTS:
+                await asyncio.sleep(1)
+
+    if response is None or response.status_code != 200:
         raise HTTPException(
             status_code=502,
-            detail=f"Fish Audio TTS failed: {response.text}",
+            detail=f"Fish Audio TTS failed: {response.text if response else 'no response'}",
         )
 
     if not response.content:

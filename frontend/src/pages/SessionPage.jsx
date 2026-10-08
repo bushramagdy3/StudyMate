@@ -5,12 +5,6 @@ import { PdfSlideViewer } from '../components/PdfSlideViewer.jsx'
 import { SessionOutline } from '../components/SessionOutline.jsx'
 import { playSpeech, playThinkingSpeech, stopSpeech } from '../utils/speechAudio.js'
 
-function logSpeechError(error) {
-  if (error?.name !== 'AbortError') {
-    console.error(error)
-  }
-}
-
 function statusForAutomaticContinue(phase) {
   if (phase === 'explaining') return 'Preparing a question…'
   if (phase === 'answering_student') return 'Returning to where we left off…'
@@ -25,6 +19,18 @@ function statusForCurrentPhase(phase) {
   if (phase === 'awaiting_student_question') return 'Ask your question'
   if (phase === 'answering_student') return 'Answering your question'
   return ''
+}
+
+function postureAfterSpeech(awaiting) {
+  if (awaiting === 'answer' || awaiting === 'question') {
+    return 'listening'
+  }
+
+  if (awaiting === 'continue') {
+    return 'thinking'
+  }
+
+  return 'idle'
 }
 
 export function SessionPage({
@@ -81,6 +87,17 @@ export function SessionPage({
     onTeacherResponseChange(response)
   }, [onTeacherResponseChange])
 
+  const handleSpeechError = useCallback((error) => {
+    if (error?.name === 'AbortError') {
+      return
+    }
+
+    setSubtitle('')
+    setIsAudioPending(false)
+    setAvatarPosture('idle')
+    onError?.(error, 'Could not play Regina’s response')
+  }, [onError])
+
   const sendEvent = useCallback(async (event, options = {}) => {
     const token = actionToken.current + 1
     actionToken.current = token
@@ -90,6 +107,7 @@ export function SessionPage({
     stopSpeech()
     setSubtitle('')
     setIsAudioPending(false)
+    setAvatarPosture('thinking')
     eventRequests.current.forEach((request) => request.abort())
     eventRequests.current.clear()
 
@@ -113,7 +131,7 @@ export function SessionPage({
             setSubtitle(text)
           }
         },
-      }).catch(logSpeechError)
+      }).catch(handleSpeechError)
     }
 
     try {
@@ -128,6 +146,7 @@ export function SessionPage({
       }
     } catch (error) {
       if (error.name !== 'AbortError' && token === actionToken.current) {
+        setAvatarPosture('idle')
         onError?.(error, 'Could not continue the session')
       }
     } finally {
@@ -141,6 +160,7 @@ export function SessionPage({
   }, [
     applyTeacherResponse,
     environment.id,
+    handleSpeechError,
     onError,
     teacherResponse.session_id,
   ])
@@ -177,9 +197,7 @@ export function SessionPage({
         if (token === actionToken.current) {
           setSubtitle('')
           setIsAudioPending(false)
-          if (teacherResponse.awaiting === 'nothing') {
-            setAvatarPosture('idle')
-          }
+          setAvatarPosture(postureAfterSpeech(teacherResponse.awaiting))
         }
 
         if (
@@ -197,7 +215,7 @@ export function SessionPage({
 
         return null
       })
-      .catch(logSpeechError)
+      .catch(handleSpeechError)
   }, [
     environment.id,
     sendEvent,
@@ -207,6 +225,7 @@ export function SessionPage({
     teacherResponse.speech,
     teacherResponse.speech_slides,
     teacherResponse.avatar_state,
+    handleSpeechError,
   ])
 
   function chooseTopic(topicIndex) {

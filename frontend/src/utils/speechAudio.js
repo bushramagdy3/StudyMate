@@ -6,6 +6,7 @@ import {
 
 const backendBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'
 const backendSpeechUrl = `${backendBaseUrl}/api/tutor-speech`
+const SPEECH_REQUEST_TIMEOUT_MS = 45_000
 
 let currentAudio = null
 let finishCurrentAudio = null
@@ -160,6 +161,11 @@ function playAudioUrl(audioUrl, shouldRevoke = false, subtitles = null, callback
 async function fetchSpeechAudio(text) {
   const controller = new AbortController()
   speechRequests.add(controller)
+  let timedOut = false
+  const timeoutId = window.setTimeout(() => {
+    timedOut = true
+    controller.abort()
+  }, SPEECH_REQUEST_TIMEOUT_MS)
 
   try {
     const response = await fetch(backendSpeechUrl, {
@@ -172,11 +178,29 @@ async function fetchSpeechAudio(text) {
     })
 
     if (!response.ok) {
-      throw new Error('Could not generate tutor speech')
+      let message = 'Could not generate Regina’s speech.'
+
+      try {
+        const data = await response.json()
+        message = data.detail || message
+      } catch {
+        message = response.statusText || message
+      }
+
+      throw new Error(message)
     }
 
     return URL.createObjectURL(await response.blob())
+  } catch (error) {
+    if (timedOut) {
+      throw new Error('Generating Regina’s speech took too long. Please try again.', {
+        cause: error,
+      })
+    }
+
+    throw error
   } finally {
+    window.clearTimeout(timeoutId)
     speechRequests.delete(controller)
   }
 }
@@ -209,6 +233,9 @@ export async function playSpeech(speech, environmentId, callbacks = {}) {
   const onStart = typeof callbacks === 'function'
     ? () => {}
     : callbacks.onStart || (() => {})
+  const onError = typeof callbacks === 'function'
+    ? () => {}
+    : callbacks.onError || (() => {})
 
   // Hide the previous subtitle until this speech's audio starts playing.
   onSegment(0, '')
@@ -228,12 +255,17 @@ export async function playSpeech(speech, environmentId, callbacks = {}) {
       (subtitle) => onSegment(0, subtitle),
       () => onSegment(0, ''),
     )
-    await playAudioUrl(
-      getPregeneratedSpeechUrl(environmentId, pregenerated),
-      false,
-      subtitles,
-      { onStart },
-    )
+    try {
+      await playAudioUrl(
+        getPregeneratedSpeechUrl(environmentId, pregenerated),
+        false,
+        subtitles,
+        { onStart },
+      )
+    } catch (error) {
+      onError(error)
+      throw error
+    }
     return
   }
 
@@ -247,7 +279,13 @@ export async function playSpeech(speech, environmentId, callbacks = {}) {
 
   for (let index = 0; index < segments.length; index += 1) {
     onWaiting()
-    const audioUrl = await nextAudio
+    let audioUrl
+    try {
+      audioUrl = await nextAudio
+    } catch (error) {
+      onError(error)
+      throw error
+    }
 
     if (sequence !== speechSequence) {
       URL.revokeObjectURL(audioUrl)
@@ -262,7 +300,12 @@ export async function playSpeech(speech, environmentId, callbacks = {}) {
       (subtitle) => onSegment(segments[index].sourceIndex, subtitle),
       () => onSegment(segments[index].sourceIndex, ''),
     )
-    await playAudioUrl(audioUrl, true, subtitles, { onStart })
+    try {
+      await playAudioUrl(audioUrl, true, subtitles, { onStart })
+    } catch (error) {
+      onError(error)
+      throw error
+    }
 
     if (sequence !== speechSequence) {
       return
