@@ -953,14 +953,16 @@ button {
 
 .topic-play-button {
   align-items: center;
-  background: none;
+  background: transparent;
   border: 0;
   color: var(--cream);
   cursor: pointer;
   display: flex;
   justify-content: center;
-  padding: clamp(3px, 0.25vw, 5px);
+  height: clamp(28px, 2.3vw, 38px);
+  padding: 0;
   transition: filter 120ms ease, transform 120ms ease;
+  width: clamp(28px, 2.3vw, 38px);
 }
 
 .topic-play-button:hover:not(:disabled),
@@ -981,8 +983,15 @@ button {
 .topic-summary-icon,
 .topic-control-icon {
   display: block;
-  height: clamp(24px, 2vw, 34px);
-  width: clamp(24px, 2vw, 34px);
+  image-rendering: pixelated;
+  height: 100%;
+  object-fit: contain;
+  width: 100%;
+}
+
+.topic-play-button .topic-control-icon {
+  height: 100%;
+  width: 100%;
 }
 
 .session-lecture-summary {
@@ -1001,6 +1010,12 @@ button {
   padding: 0 5%;
   text-align: center;
   transition: filter 120ms ease, transform 120ms ease;
+}
+
+.session-lecture-summary .topic-summary-icon {
+  flex: 0 0 auto;
+  height: clamp(24px, 1.9vw, 32px);
+  width: clamp(24px, 1.9vw, 32px);
 }
 
 .session-lecture-summary:hover:not(:disabled) {
@@ -1550,14 +1565,12 @@ button {
 
 .pdf-slide-loading-spinner,
 .session-flow-spinner {
-  animation: session-spin 850ms linear infinite;
-  border: 3px solid rgba(91, 52, 42, 0.28);
-  border-radius: 50%;
-  border-top-color: currentColor;
   display: inline-block;
   flex: 0 0 auto;
-  height: 18px;
-  width: 18px;
+  height: clamp(19px, 1.55vw, 27px);
+  image-rendering: pixelated;
+  object-fit: contain;
+  width: clamp(19px, 1.55vw, 27px);
 }
 
 .pdf-slide-native-fallback {
@@ -1631,11 +1644,6 @@ button {
   border-color: #f0aa78;
 }
 
-.session-flow-status .session-flow-spinner {
-  border-color: rgba(255, 241, 219, 0.28);
-  border-top-color: #fff1db;
-}
-
 .session-request-error {
   background: rgba(73, 25, 21, 0.96);
   border: 2px solid #f0aa78;
@@ -1652,8 +1660,3 @@ button {
   z-index: 50;
 }
 
-@keyframes session-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}

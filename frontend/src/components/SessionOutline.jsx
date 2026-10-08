@@ -1,59 +1,28 @@
+import loadingIcon from '../assets/generated-icons/outline-loading.gif'
+import playIcon from '../assets/generated-icons/outline-play.png'
+import replayIcon from '../assets/generated-icons/outline-replay.png'
+import summaryIcon from '../assets/generated-icons/outline-summary.png'
+
 function TopicControlIcon({ kind }) {
   if (kind === 'loading') {
-    return (
-      <svg
-        className="topic-control-icon topic-control-icon-loading"
-        viewBox="0 0 32 32"
-        aria-hidden="true"
-      >
-        <circle className="topic-spinner-track" cx="16" cy="16" r="10" />
-        <path className="topic-spinner-head" d="M16 6a10 10 0 0 1 10 10" />
-      </svg>
-    )
+    return <img className="topic-control-icon" src={loadingIcon} alt="" />
   }
 
   if (kind === 'replay') {
-    return (
-      <svg
-        className="topic-control-icon"
-        viewBox="0 0 32 32"
-        aria-hidden="true"
-      >
-        <path
-          d="M9.2 10.2A10 10 0 1 1 6 17.5"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="3.4"
-          strokeLinecap="round"
-        />
-        <path d="M5 6v8h8z" fill="currentColor" />
-      </svg>
-    )
+    return <img className="topic-control-icon" src={replayIcon} alt="" />
   }
 
-  return (
-    <svg
-      className="topic-control-icon"
-      viewBox="0 0 32 32"
-      aria-hidden="true"
-    >
-      <path d="M10 7.5 25 16 10 24.5z" fill="currentColor" />
-    </svg>
-  )
+  return <img className="topic-control-icon" src={playIcon} alt="" />
 }
 
 function TopicSummaryIcon() {
-  return (
-    <svg className="topic-summary-icon" viewBox="0 0 32 32" aria-hidden="true">
-      <path d="M8 4h12l4 4v20H8z" fill="none" stroke="currentColor" strokeWidth="2.6" />
-      <path d="M20 4v5h5M12 14h8M12 19h8M12 24h5" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="square" />
-    </svg>
-  )
+  return <img className="topic-summary-icon" src={summaryIcon} alt="" />
 }
 
 export function SessionOutline({
   completedTopics = [],
   currentTopic,
+  disableCurrentTopic = false,
   disabled = false,
   onOpenLectureSummary,
   onSelectTopic,
@@ -70,6 +39,7 @@ export function SessionOutline({
           const isCompleted = completedTopics.includes(topic.index)
           const isActive = currentTopic === topic.index
           const isLoading = pendingTopic === topic.index
+          const topicDisabled = disabled || (disableCurrentTopic && isActive)
 
           return (
             <div
@@ -83,10 +53,11 @@ export function SessionOutline({
             >
               <button
                 className="session-topic-title"
-                disabled={disabled}
+                disabled={topicDisabled}
                 type="button"
                 onClick={() => onSelectTopic(topic.index)}
                 title={`${isCompleted ? 'Replay' : 'Play'} ${topic.title}`}
+                aria-current={isActive ? 'step' : undefined}
               >
                 <span>{topic.title}</span>
               </button>
@@ -94,7 +65,7 @@ export function SessionOutline({
               <div className="session-topic-actions">
                 <button
                   className="topic-play-button"
-                  disabled={disabled}
+                  disabled={topicDisabled}
                   type="button"
                   onClick={() => onSelectTopic(topic.index)}
                   title={`${isCompleted ? 'Replay' : 'Play'} ${topic.title}`}

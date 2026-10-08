@@ -4,6 +4,7 @@ import { MessageBar } from '../components/MessageBar.jsx'
 import { PdfSlideViewer } from '../components/PdfSlideViewer.jsx'
 import { SessionOutline } from '../components/SessionOutline.jsx'
 import { TopicSummaryPopup } from '../components/TopicSummaryPopup.jsx'
+import loadingIcon from '../assets/generated-icons/outline-loading.gif'
 import { playSpeech, playThinkingSpeech, stopSpeech } from '../utils/speechAudio.js'
 
 function statusForAutomaticContinue(phase) {
@@ -337,7 +338,7 @@ export function SessionPage({
             role="status"
             aria-live="polite"
           >
-            {isBusy && <span className="session-flow-spinner" aria-hidden="true" />}
+            {isBusy && <img className="session-flow-spinner" src={loadingIcon} alt="" />}
             <span>{stageStatus}</span>
           </div>
         )}
@@ -353,6 +354,7 @@ export function SessionPage({
       <SessionOutline
         completedTopics={teacherResponse.completed_topics}
         currentTopic={teacherResponse.current_topic}
+        disableCurrentTopic={teacherResponse.awaiting === 'continue'}
         disabled={isBusy || introIsPlaying}
         onOpenLectureSummary={() => setIsLectureSummaryOpen(true)}
         onSelectTopic={chooseTopic}
