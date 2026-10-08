@@ -61,9 +61,10 @@ class PendingQuestion(TypedDict):
     explanation: str  # the short "why" used after praise or after revealing the answer
 
 
-class TopicProgress(TypedDict):
+class TopicProgress(TypedDict, total=False):
     segments: list[str]
     segment_slides: list[int]
+    pace: str  # "slow", "normal" or "quick" (see explaining.py)
     question_points: list[int]
     segment_index: int  # where to pick the topic up again
 
@@ -88,6 +89,7 @@ class TeacherState(TypedDict):
     current_slide: int | None
     segments: list[str]  # the current topic's explanation, split into short parts
     segment_slides: list[int]  # slide/page to show for each explanation segment
+    pace: str  # the current topic's pace: "slow", "normal" or "quick" (see explaining.py)
     segment_index: int  # next segment to say; on raise_hand, the one to resume from
     question_points: list[int]  # ask a question after these segment numbers, e.g. [2, 4]
     completed_topics: list[int]
@@ -124,6 +126,7 @@ def initial_state(session_id: str, request: StartSessionRequest) -> TeacherState
         "current_slide": request.lecture[0].slide if request.lecture else None,
         "segments": [],
         "segment_slides": [],
+        "pace": "normal",
         "segment_index": 0,
         "question_points": [],
         "completed_topics": [],
@@ -215,7 +218,42 @@ def to_response(state: TeacherState) -> TeacherResponse:
         summary_available=get_personality(state["environment"]).offers_summary
         and state["mode"] != Mode.ENDED,
         quiz_available=all_topics_completed(state),
+        lecture_progress=lecture_progress(state),
+        speech_rate=PACE_SPEECH_RATES.get(state.get("pace", "normal"), 1.0)
+        if state["mode"] == Mode.EXPLAINING
+        else 1.0,
     )
+
+
+# Playback speed for each pace. Small changes: enough to feel the difference,
+# not enough to sound unnatural.
+PACE_SPEECH_RATES = {"slow": 0.9, "normal": 1.0, "quick": 1.1}
+
+
+def lecture_progress(state: TeacherState) -> float:
+    """0.0 to 1.0: finished topics count fully, a topic in progress by how much was said.
+
+    A topic in progress is capped below 1, so 100% only shows once every topic is done.
+    """
+    outline = state["outline"]
+    if not outline:
+        return 0.0
+    completed = set(state["completed_topics"])
+    done = 0.0
+    for index in range(len(outline)):
+        if index in completed:
+            done += 1
+            continue
+        if index == state["current_topic"] and state["segments"]:
+            segments, said = state["segments"], state["segment_index"]
+        elif index in state["topic_progress"]:
+            saved = state["topic_progress"][index]
+            segments, said = saved.get("segments", []), saved.get("segment_index", 0)
+        else:
+            continue
+        if segments:
+            done += min(said / len(segments), 0.95)
+    return round(min(done / len(outline), 1.0), 4)
 
 
 def all_topics_completed(state: TeacherState) -> bool:

@@ -190,6 +190,12 @@ class TeacherResponse(_Model):
     summary_available: bool = False
     # The quiz at the bottom of the outline unlocks once every topic is completed.
     quiz_available: bool = False
+    # How far through the lecture the student is, 0.0 to 1.0: finished topics
+    # count fully, and the topic in progress counts by how much has been said.
+    lecture_progress: float = Field(default=0.0, ge=0.0, le=1.0)
+    # Playback speed for this speech (1.0 = normal). Regina slows down for deep
+    # or brand-new concepts and goes a little faster on intuitive ones.
+    speech_rate: float = Field(default=1.0, ge=0.5, le=2.0)
 
     @model_validator(mode="after")
     def _topics_exist(self) -> "TeacherResponse":

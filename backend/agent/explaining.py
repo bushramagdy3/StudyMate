@@ -7,6 +7,12 @@ and 2 questions it might choose question_points = [1, 4]:
 
     [0] -> question -> [1, 2, 3] -> question
 
+Pacing: the LLM judges each topic and picks a pace. A deep concept, or one
+that brings in terms the student hasn't met, is "slow": more segments, every
+new term defined, smaller steps, an example and a recap, spoken a little
+slower. An intuitive topic, or one built on ideas already covered, is
+"quick": fewer segments, no re-defining, spoken a little faster.
+
 While a part is playing, state["segment_index"] is the index of its FIRST
 segment. The frontend reports positions inside the part it received, so:
 - raise_hand(segment_index=i)  -> resume from state["segment_index"] + i
@@ -14,6 +20,7 @@ segment. The frontend reports positions inside the part it received, so:
 """
 
 import re
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -25,7 +32,14 @@ from agent.state import Mode, OutlineTopic, TeacherState
 RECENT_HISTORY = 6  # how many recent lines of conversation to show the LLM
 
 
+Pace = Literal["slow", "normal", "quick"]
+
+
 class Explanation(BaseModel):
+    pace: Pace = Field(
+        default="normal",
+        description='"slow" for deep or new concepts, "quick" for intuitive or familiar ones',
+    )
     segments: list[str]
     question_after: list[int] = Field(
         description="Segment numbers (1 = first segment) after which to pause and ask a question"
@@ -76,6 +90,31 @@ def next_stop(segment_index: int, question_points: list[int], segment_count: int
 
 
 # ---------------------------------------------------------------------------
+# Pacing
+# ---------------------------------------------------------------------------
+
+
+def segment_range(segments_per_topic: int) -> tuple[int, int]:
+    """How many segments a topic may have: fewer for quick topics, more for slow ones.
+
+    The personality's segments_per_topic is the normal amount, e.g. 4 -> 3 to 8.
+    """
+    return max(2, segments_per_topic - 1), segments_per_topic * 2
+
+
+def known_ideas(state: TeacherState, index: int) -> list[str]:
+    """What the student has already been taught: other finished topics and their key points."""
+    lines = []
+    for i in state["completed_topics"]:
+        if i == index:
+            continue
+        topic = state["outline"][i]
+        points = "; ".join(topic["key_points"][:4])
+        lines.append(f"- {topic['title']}" + (f": {points}" if points else ""))
+    return lines
+
+
+# ---------------------------------------------------------------------------
 # Writing the explanation
 # ---------------------------------------------------------------------------
 
@@ -85,8 +124,9 @@ def explain_prompt(state: TeacherState, previous: list[str] | None = None) -> st
     index = state["current_topic"]
     topic = state["outline"][index]
     count = personality.segments_per_topic
-    questions = question_count(count, personality.questions_per_topic)
-    covered = [state["outline"][i]["title"] for i in state["completed_topics"] if i != index]
+    fewest, most = segment_range(count)
+    questions = personality.questions_per_topic
+    known = known_ideas(state, index)
 
     lines = [
         f'Explain topic {index + 1} of {len(state["outline"])}: "{topic["title"]}".',
@@ -103,11 +143,12 @@ def explain_prompt(state: TeacherState, previous: list[str] | None = None) -> st
         "The session introduction has already happened. Start teaching this topic directly. "
         "Do not greet the student or introduce yourself again."
     )
-    if covered:
-        lines.append(
-            f"Already covered: {', '.join(covered)}. Don't re-teach these, but you can "
-            "briefly connect to the previous topic."
-        )
+    if known:
+        lines += [
+            "Already taught (the student knows these terms; don't re-teach or re-define "
+            "them, but you can connect to them in a sentence):",
+            *known,
+        ]
 
     if previous is not None:
         lines += ["", "The student asked to hear this topic explained again."]
@@ -115,7 +156,8 @@ def explain_prompt(state: TeacherState, previous: list[str] | None = None) -> st
             lines += ["Your previous explanation was:", *(f'"{segment}"' for segment in previous)]
         lines += [
             "Explain it again differently: use simpler words, a new example or analogy, "
-            "and smaller steps. Don't repeat the same sentences.",
+            "and smaller steps. Don't repeat the same sentences. They found it hard, so "
+            "don't choose the \"quick\" pace.",
         ]
 
     recent = state["history"][-RECENT_HISTORY:]
@@ -125,7 +167,17 @@ def explain_prompt(state: TeacherState, previous: list[str] | None = None) -> st
 
     lines += [
         "",
-        f"Write the explanation as exactly {count} segments, in teaching order.",
+        "First judge how this topic should be paced, and set pace:",
+        f'- "slow": a deep or abstract concept, or it introduces terms or ideas the student '
+        f"hasn't met before. Use {count + 1} to {most} segments. Define each new term in plain "
+        "words the first time you use it, build the idea in small steps, give a concrete "
+        "example, and end with a one-sentence recap.",
+        f'- "normal": a typical topic. Use about {count} segments.',
+        f'- "quick": intuitive, or it mostly builds on ideas already taught. Use {fewest} to '
+        f"{count} segments. Skip what the student already knows and focus on what's new.",
+        "A topic mixing a familiar idea with one new term is \"normal\": go slowly only on the new term.",
+        "",
+        f"Write the explanation as {fewest} to {most} segments (matching the pace), in teaching order.",
         "Each segment is 2 to 4 short spoken sentences about one small idea.",
         "Use complete, concise sentences; each sentence becomes its own playback and resume chunk.",
         "Teach clearly: define new terms before using them, then explain the idea step by step.",
@@ -134,8 +186,8 @@ def explain_prompt(state: TeacherState, previous: list[str] | None = None) -> st
         "Don't ask the student questions; questions come separately.",
         "",
         f"Also choose where to pause and ask the student a question: in question_after, list "
-        f"exactly {questions} segment number(s) between 1 and {count}, each right after a "
-        f"complete idea has been explained. The last one must be {count} (the end of the topic).",
+        f"exactly {questions} segment number(s), each right after a complete idea has been "
+        "explained. The last one must be the number of your final segment (the end of the topic).",
         "Don't mention segments, slide numbers or these instructions.",
     ]
     return "\n".join(lines)
@@ -144,20 +196,32 @@ def explain_prompt(state: TeacherState, previous: list[str] | None = None) -> st
 def generate_segments(
     llm: LLM, state: TeacherState, previous: list[str] | None = None
 ) -> tuple[list[str], list[int]]:
-    """The current topic's explanation as (segments, question_points).
+    """The current topic's explanation as (segments, question_points)."""
+    segments, points, _pace = generate_explanation(llm, state, previous)
+    return segments, points
+
+
+def generate_explanation(
+    llm: LLM, state: TeacherState, previous: list[str] | None = None
+) -> tuple[list[str], list[int], str]:
+    """The current topic's explanation as (segments, question_points, pace).
 
     `previous` is set when the student asked to hear the topic again (repeat):
     the old explanation, or [] if it's no longer available.
     """
     personality = get_personality(state["environment"])
     topic = state["outline"][state["current_topic"]]
+    _fewest, most = segment_range(personality.segments_per_topic)
     try:
         explanation = llm.chat_json(
             messages(build_system_prompt(personality), explain_prompt(state, previous)),
             Explanation,
             temperature=0.7,
         )
-        grouped_segments = fit_segments(explanation.segments, personality.segments_per_topic)
+        pace = explanation.pace
+        if previous is not None and pace == "quick":
+            pace = "normal"  # they asked to hear it again: never rush it
+        grouped_segments = fit_segments(explanation.segments, most)
         segments, group_ends = split_into_sentence_segments(grouped_segments)
         if segments:
             mapped_points = [
@@ -168,7 +232,7 @@ def generate_segments(
             points = choose_question_points(
                 mapped_points, len(segments), personality.questions_per_topic
             )
-            return segments, points
+            return segments, points, pace
     except LLMError:
         pass
     grouped_segments = fallback_segments(topic)
@@ -177,7 +241,7 @@ def generate_segments(
         len(grouped_segments), personality.questions_per_topic
     )
     points = [group_ends[point - 1] for point in grouped_points]
-    return segments, points
+    return segments, points, "normal"
 
 
 def slides_for_segments(segments: list[str], source_slides: list[int]) -> list[int]:
@@ -270,7 +334,7 @@ def make_explain_node(llm: LLM):
 
     def explain(state: TeacherState) -> dict:
         if not state["segments"]:
-            segments, points = generate_segments(llm, state)
+            segments, points, pace = generate_explanation(llm, state)
             segments, points, segment_slides = add_slide_transitions(
                 segments,
                 points,
@@ -281,7 +345,7 @@ def make_explain_node(llm: LLM):
                 points,
                 0,
                 segment_slides,
-            )
+            ) | {"pace": pace}
         return say_part(
             state["segments"],
             state["question_points"],
@@ -361,6 +425,7 @@ def save_progress(state: TeacherState) -> dict:
             "segment_slides": state["segment_slides"],
             "question_points": state["question_points"],
             "segment_index": resume_index(state),
+            "pace": state.get("pace", "normal"),
         }
     return progress
 
@@ -381,7 +446,7 @@ def enter_topic(state: TeacherState, topic: int, progress: dict, restart_current
     }
     saved = progress.get(topic)
     if saved is None:
-        return update | {"segments": [], "question_points": [], "segment_index": 0}
+        return update | {"segments": [], "question_points": [], "segment_index": 0, "pace": "normal"}
 
     start = saved["segment_index"]
     finished = topic in state["completed_topics"] or start >= len(saved["segments"])
@@ -392,4 +457,4 @@ def enter_topic(state: TeacherState, topic: int, progress: dict, restart_current
         saved["question_points"],
         start,
         saved.get("segment_slides", []),
-    )
+    ) | {"pace": saved.get("pace", "normal")}

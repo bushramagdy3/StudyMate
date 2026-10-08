@@ -24,7 +24,7 @@ an action when its check says no.
 from agent.explaining import (
     add_slide_transitions,
     enter_topic,
-    generate_segments,
+    generate_explanation,
     next_stop,
     save_progress,
     say_part,
@@ -96,7 +96,7 @@ def make_repeat_node(llm: LLM):
     """
 
     def repeat(state: TeacherState) -> dict:
-        segments, points = generate_segments(llm, state, previous=state["segments"])
+        segments, points, pace = generate_explanation(llm, state, previous=state["segments"])
         segments, points, segment_slides = add_slide_transitions(
             segments,
             points,
@@ -105,6 +105,7 @@ def make_repeat_node(llm: LLM):
         return {
             "pending_question": None,
             "attempts": 0,
+            "pace": pace,
             **say_part(
                 segments,
                 points,
