@@ -28,6 +28,13 @@ export function ChooseEnvironmentPage({
               onClick={() => onSelectEnvironment(environment.id)}
             >
               <img src={environment.image} alt={environment.name} />
+              <span className="environment-card-details">
+                <span className="environment-card-feature-list">
+                  {environment.features.map((feature) => (
+                    <span key={feature}>{feature}</span>
+                  ))}
+                </span>
+              </span>
             </button>
           ))}
         </section>

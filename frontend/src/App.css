@@ -667,7 +667,6 @@ button {
 
 .environment-card:hover,
 .environment-card:focus-visible {
-  filter: brightness(1.08);
   transform: translateY(-3px);
 }
 
@@ -684,8 +683,53 @@ button {
   display: block;
   image-rendering: pixelated;
   position: relative;
+  transition: filter 180ms steps(5, end);
   width: 100%;
   z-index: 1;
+}
+
+.environment-card-details {
+  align-items: center;
+  color: var(--cream);
+  display: flex;
+  flex-direction: column;
+  inset: 8% 7% 17%;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
+  text-align: center;
+  text-shadow: 2px 2px 0 #000;
+  transition: opacity 160ms steps(4, end);
+  z-index: 2;
+}
+
+.environment-card-feature-list {
+  display: grid;
+  gap: clamp(10px, 0.9vw, 15px);
+}
+
+.environment-card-feature-list span {
+  font-family: var(--pixel-font);
+  font-size: clamp(15px, 1.08vw, 20px);
+  font-weight: 800;
+  line-height: 1.12;
+}
+
+.environment-card-feature-list span::before {
+  color: #f0aa78;
+  content: ">";
+  margin-right: 0.45em;
+}
+
+.environment-card:hover img,
+.environment-card:focus-visible img {
+  filter: brightness(0.52) blur(1.4px);
+}
+
+.environment-card:hover .environment-card-details,
+.environment-card:focus-visible .environment-card-details {
+  opacity: 1;
 }
 
 .environment-card[aria-pressed="true"] img {
@@ -694,6 +738,15 @@ button {
     drop-shadow(0 0 clamp(8px, 1vw, 16px) rgba(255, 229, 185, 0.85))
     drop-shadow(0 0 clamp(14px, 1.6vw, 26px) rgba(255, 176, 88, 0.55));
   transform-origin: center bottom;
+}
+
+.environment-card[aria-pressed="true"]:hover img,
+.environment-card[aria-pressed="true"]:focus-visible img {
+  filter:
+    brightness(0.52)
+    blur(1.4px)
+    drop-shadow(0 0 clamp(8px, 1vw, 16px) rgba(255, 229, 185, 0.85))
+    drop-shadow(0 0 clamp(14px, 1.6vw, 26px) rgba(255, 176, 88, 0.55));
 }
 
 .session-page {
