@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { sendSessionEvent } from '../api/studyMateApi.js'
+import { sendSessionEvent, startQuiz, submitQuiz } from '../api/studyMateApi.js'
 import { MessageBar } from '../components/MessageBar.jsx'
 import { PdfSlideViewer } from '../components/PdfSlideViewer.jsx'
+import { QuizPopup } from '../components/QuizPopup.jsx'
 import { SessionOutline } from '../components/SessionOutline.jsx'
 import { TopicSummaryPopup } from '../components/TopicSummaryPopup.jsx'
 import loadingIcon from '../assets/generated-icons/outline-loading.gif'
@@ -49,6 +50,15 @@ export function SessionPage({
   const [isAudioPending, setIsAudioPending] = useState(false)
   const [avatarPosture, setAvatarPosture] = useState('idle')
   const [isLectureSummaryOpen, setIsLectureSummaryOpen] = useState(false)
+  // The mini quiz: the questions, the marked result, and which view is showing
+  // ('loading', 'taking', 'submitting', 'results', 'error'; null = closed).
+  const [quiz, setQuiz] = useState(null)
+  const [quizResult, setQuizResult] = useState(null)
+  const [quizStatus, setQuizStatus] = useState(null)
+  const [quizError, setQuizError] = useState('')
+  const quizRequest = useRef(null)
+  // What to do on "Try again": the request that failed.
+  const failedQuizAction = useRef(null)
   const [displayedSlide, setDisplayedSlide] = useState(
     initialTeacherResponse.current_slide || 1,
   )
@@ -82,6 +92,7 @@ export function SessionPage({
 
       requests.forEach((controller) => controller.abort())
       requests.clear()
+      quizRequest.current?.abort()
     }
   }, [])
 
@@ -261,6 +272,70 @@ export function SessionPage({
     )
   }
 
+  async function openQuiz(mode) {
+    if (isBusy) {
+      return
+    }
+
+    // The quiz covers the lecture, so Regina stops talking.
+    actionToken.current += 1
+    stopSpeech()
+    setSubtitle('')
+    setAvatarPosture('idle')
+
+    quizRequest.current?.abort()
+    const controller = new AbortController()
+    quizRequest.current = controller
+    failedQuizAction.current = () => openQuiz(mode)
+    setQuizResult(null)
+    setQuizError('')
+    setQuizStatus('loading')
+
+    try {
+      const nextQuiz = await startQuiz(teacherResponse.session_id, mode, controller.signal)
+      if (quizRequest.current === controller) {
+        setQuiz(nextQuiz)
+        setQuizStatus('taking')
+      }
+    } catch (error) {
+      if (error.name !== 'AbortError' && quizRequest.current === controller) {
+        setQuizError(error.message)
+        setQuizStatus('error')
+      }
+    }
+  }
+
+  async function sendQuizAnswers(answers) {
+    quizRequest.current?.abort()
+    const controller = new AbortController()
+    quizRequest.current = controller
+    failedQuizAction.current = () => sendQuizAnswers(answers)
+    setQuizStatus('submitting')
+
+    try {
+      const result = await submitQuiz(teacherResponse.session_id, answers, controller.signal)
+      if (quizRequest.current === controller) {
+        setQuizResult(result)
+        setQuizStatus('results')
+      }
+    } catch (error) {
+      if (error.name !== 'AbortError' && quizRequest.current === controller) {
+        setQuizError(error.message)
+        setQuizStatus('error')
+      }
+    }
+  }
+
+  function retryQuiz() {
+    failedQuizAction.current?.()
+  }
+
+  function closeQuiz() {
+    quizRequest.current?.abort()
+    quizRequest.current = null
+    setQuizStatus(null)
+  }
+
   function raiseHand() {
     if (isBusy) {
       return
@@ -361,6 +436,12 @@ export function SessionPage({
         outline={teacherResponse.outline}
         pendingTopic={pendingAction?.topicIndex ?? null}
         showLectureSummary={environment.id === 'private-tutor'}
+        quizAvailable={teacherResponse.quiz_available}
+        // Like the topics: not while Regina is mid-lesson or a request is running.
+        quizDisabled={isBusy || teacherResponse.awaiting !== 'nothing'}
+        quizLoading={quizStatus === 'loading'}
+        quizTaken={quiz !== null}
+        onStartQuiz={openQuiz}
       />
 
       <MessageBar
@@ -381,6 +462,18 @@ export function SessionPage({
             : null
         }
         onClose={() => setIsLectureSummaryOpen(false)}
+      />
+
+      <QuizPopup
+        error={quizError}
+        quiz={quiz}
+        result={quizResult}
+        status={quizStatus}
+        onClose={closeQuiz}
+        onNewQuiz={() => openQuiz('new')}
+        onRetake={() => openQuiz('restart')}
+        onRetry={retryQuiz}
+        onSubmit={sendQuizAnswers}
       />
     </main>
   )
