@@ -19,7 +19,9 @@ function safelyCall(resource, method) {
   }
 }
 
-export function PdfSlideViewer({ pdfUrl, slideNumber, topicTitle, onError }) {
+// fitWidth: the page fills the screen's width and scrolls down, instead of
+// shrinking until the whole page fits (unreadable for a tall A4 page on a small screen).
+export function PdfSlideViewer({ fitWidth = false, pdfUrl, slideNumber, topicTitle, onError }) {
   const hostRef = useRef(null)
   const canvasRef = useRef(null)
   const [pdfDocument, setPdfDocument] = useState(null)
@@ -118,10 +120,12 @@ export function PdfSlideViewer({ pdfUrl, slideNumber, topicTitle, onError }) {
         const baseViewport = page.getViewport({ scale: 1 })
         const availableWidth = Math.max(host.clientWidth, 1)
         const availableHeight = Math.max(host.clientHeight, 1)
-        const scale = Math.min(
-          availableWidth / baseViewport.width,
-          availableHeight / baseViewport.height,
-        )
+        const scale = fitWidth
+          ? availableWidth / baseViewport.width
+          : Math.min(
+              availableWidth / baseViewport.width,
+              availableHeight / baseViewport.height,
+            )
         const viewport = page.getViewport({ scale: Math.max(scale, 0.1) })
         const pixelRatio = Math.min(window.devicePixelRatio || 1, 2)
         const context = canvas.getContext('2d', { alpha: false })
@@ -146,6 +150,12 @@ export function PdfSlideViewer({ pdfUrl, slideNumber, topicTitle, onError }) {
 
         if (!cancelled) {
           setStatus('ready')
+        }
+
+        // A new slide starts at its top.
+        if (fitWidth && host.dataset.page !== String(pageNumber)) {
+          host.dataset.page = String(pageNumber)
+          host.scrollTop = 0
         }
       } catch (error) {
         if (
@@ -185,7 +195,7 @@ export function PdfSlideViewer({ pdfUrl, slideNumber, topicTitle, onError }) {
       safelyCall(renderTask, 'cancel')
       safelyCall(renderedPage, 'cleanup')
     }
-  }, [onError, pdfDocument, slideNumber])
+  }, [fitWidth, onError, pdfDocument, slideNumber])
 
   if (!pdfUrl) {
     return (
@@ -201,8 +211,10 @@ export function PdfSlideViewer({ pdfUrl, slideNumber, topicTitle, onError }) {
 
   return (
     <div
-      className="pdf-slide-canvas-wrap"
+      className={fitWidth ? 'pdf-slide-canvas-wrap fit-width' : 'pdf-slide-canvas-wrap'}
       ref={hostRef}
+      // Scrollable with the keyboard too.
+      tabIndex={fitWidth ? 0 : undefined}
       role="img"
       aria-label={`Slide ${slideNumber}${topicTitle ? `: ${topicTitle}` : ''}`}
     >
