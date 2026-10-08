@@ -10,6 +10,10 @@ const SPEECH_REQUEST_TIMEOUT_MS = 45_000
 
 let currentAudio = null
 let finishCurrentAudio = null
+// Starts (or resumes) the current clip. Kept so the pause button can resume it.
+let startCurrentAudio = null
+// The pause button: while true, no clip plays, including the next one in line.
+let speechPaused = false
 const speechRequests = new Set()
 
 // Goes up every time speech is stopped, so an older playSpeech() knows to give up.
@@ -77,6 +81,7 @@ function stopAudio() {
   const finish = finishCurrentAudio
   currentAudio = null
   finishCurrentAudio = null
+  startCurrentAudio = null
 
   if (audio) {
     try {
@@ -93,7 +98,20 @@ function stopAudio() {
   }
 }
 
+// Pause button. The lecture simply waits: the current clip stops where it is,
+// and a clip that's still loading won't start until resumeSpeech().
+export function pauseSpeech() {
+  speechPaused = true
+  currentAudio?.pause()
+}
+
+export function resumeSpeech() {
+  speechPaused = false
+  startCurrentAudio?.()
+}
+
 export function stopSpeech() {
+  speechPaused = false
   speechSequence += 1
   speechRequests.forEach((controller) => {
     try {
@@ -136,6 +154,7 @@ function playAudioUrl(audioUrl, shouldRevoke = false, subtitles = null, callback
       if (currentAudio === audio) {
         currentAudio = null
         finishCurrentAudio = null
+        startCurrentAudio = null
       }
     }
 
@@ -156,10 +175,21 @@ function playAudioUrl(audioUrl, shouldRevoke = false, subtitles = null, callback
       reject(new Error(`Could not play audio: ${audioUrl}`))
     }
 
-    audio.play().catch((error) => {
-      cleanUp()
-      reject(error)
-    })
+    const start = () => {
+      audio.play().catch((error) => {
+        // Paused just as the clip was starting: not a failure, resume plays it.
+        if (speechPaused && error?.name === 'AbortError' && currentAudio === audio) {
+          return
+        }
+        cleanUp()
+        reject(error)
+      })
+    }
+    startCurrentAudio = start
+
+    if (!speechPaused) {
+      start()
+    }
   })
 }
 
