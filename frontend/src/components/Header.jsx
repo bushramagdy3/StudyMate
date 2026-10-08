@@ -8,8 +8,12 @@ export function Header({
   onHome,
   completedTopics = 0,
   totalTopics = 0,
+  progress,
 }) {
-  const progress = totalTopics > 0 ? completedTopics / totalTopics : 0
+  // `progress` (0 to 1) also counts the topic in progress; without it, whole topics.
+  const fraction = progress ?? (totalTopics > 0 ? completedTopics / totalTopics : 0)
+  // Rounded down, so 100% only shows once every topic is finished.
+  const percent = Math.floor(fraction * 100)
 
   return (
     <header className="site-header">
@@ -21,18 +25,18 @@ export function Header({
       {isSession && (
         <div
           className="lecture-progress"
-          aria-label={`Lecture progress: ${completedTopics} of ${totalTopics} topics completed`}
+          aria-label={`Lecture progress: ${percent}% (${completedTopics} of ${totalTopics} topics completed)`}
         >
           <div
             className="lecture-progress-track"
             aria-hidden="true"
-            style={{ '--lecture-progress': `${progress * 100}%` }}
+            style={{ '--lecture-progress': `${percent}%` }}
           >
             <span className="lecture-progress-fill" />
             <span className="lecture-progress-sparkle" />
           </div>
           <span className="lecture-progress-count">
-            {completedTopics} / {totalTopics}
+            {percent}%
           </span>
         </div>
       )}
