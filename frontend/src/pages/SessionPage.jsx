@@ -197,6 +197,7 @@ export function SessionPage({
     const token = actionToken.current
 
     playSpeech(teacherResponse.speech, environment.id, {
+      rate: teacherResponse.speech_rate,
       onWaiting: () => {
         if (token === actionToken.current) {
           setIsAudioPending(true)
@@ -256,6 +257,7 @@ export function SessionPage({
     teacherResponse.phase,
     teacherResponse.speech,
     teacherResponse.speech_slides,
+    teacherResponse.speech_rate,
     teacherResponse.avatar_state,
     handleSpeechError,
   ])
