@@ -11,7 +11,14 @@ import { QuizPopup } from '../components/QuizPopup.jsx'
 import { SessionOutline } from '../components/SessionOutline.jsx'
 import { TopicSummaryPopup } from '../components/TopicSummaryPopup.jsx'
 import loadingIcon from '../assets/generated-icons/outline-loading.gif'
-import { playSpeech, playThinkingSpeech, stopSpeech } from '../utils/speechAudio.js'
+import {
+  pauseSpeech,
+  playSpeech,
+  playThinkingSpeech,
+  resumeSpeech,
+  stopSpeech,
+  textForSubtitle,
+} from '../utils/speechAudio.js'
 
 function statusForAutomaticContinue(phase) {
   if (phase === 'explaining') return 'Preparing a question…'
@@ -27,6 +34,18 @@ function statusForCurrentPhase(phase) {
   if (phase === 'awaiting_student_question') return 'Ask your question'
   if (phase === 'answering_student') return 'Answering your question'
   return ''
+}
+
+function PauseIcon({ paused }) {
+  return (
+    <svg className="speech-pause-icon" viewBox="0 0 24 24" aria-hidden="true" shapeRendering="crispEdges">
+      {paused ? (
+        <path d="M7 4h3v2h2v2h2v2h2v4h-2v2h-2v2h-2v2H7z" fill="currentColor" />
+      ) : (
+        <path d="M6 5h4v14H6zM14 5h4v14h-4z" fill="currentColor" />
+      )}
+    </svg>
+  )
 }
 
 function postureAfterSpeech(awaiting) {
@@ -56,6 +75,11 @@ export function SessionPage({
   const [isTranscribing, setIsTranscribing] = useState(false)
   const [voiceUnavailable, setVoiceUnavailable] = useState(false)
   const [avatarPosture, setAvatarPosture] = useState('idle')
+  // Regina's speech is playing (explaining, asking or answering): show the pause button.
+  const [isSpeaking, setIsSpeaking] = useState(false)
+  const [isPaused, setIsPaused] = useState(false)
+  // The posture to go back to when the speech is resumed.
+  const speakingPosture = useRef('speaking')
   const [isLectureSummaryOpen, setIsLectureSummaryOpen] = useState(false)
   // The mini quiz: the questions, the marked result, and which view is showing
   // ('loading', 'taking', 'submitting', 'results', 'error'; null = closed).
@@ -89,6 +113,7 @@ export function SessionPage({
     teacherResponse.current_topic === null &&
     teacherResponse.awaiting === 'continue'
   const stageStatus =
+    (isPaused ? 'Paused' : '') ||
     pendingAction?.label ||
     (isAudioPending ? 'Preparing Regina’s response…' : statusForCurrentPhase(teacherResponse.phase))
 
@@ -128,6 +153,8 @@ export function SessionPage({
     // Never leave old audio or an older request running while the student
     // starts a new action. Otherwise two responses can race and corrupt the UI.
     stopSpeech()
+    setIsSpeaking(false)
+    setIsPaused(false)
     setSubtitle('')
     setIsAudioPending(false)
     setAvatarPosture('thinking')
@@ -207,12 +234,14 @@ export function SessionPage({
       },
       onStart: () => {
         if (token === actionToken.current) {
-          setIsAudioPending(false)
-          setAvatarPosture(
+          const posture =
             teacherResponse.avatar_state === 'asking_question'
               ? 'asking_question'
-              : 'speaking',
-          )
+              : 'speaking'
+          speakingPosture.current = posture
+          setIsAudioPending(false)
+          setIsSpeaking(true)
+          setAvatarPosture(posture)
         }
       },
       onSegment: (index, text) => {
@@ -228,8 +257,16 @@ export function SessionPage({
     })
       .then(() => {
         if (token === actionToken.current) {
-          setSubtitle('')
+          // A question stays on screen until it's answered, in case the
+          // student missed it while it was being read out.
+          setSubtitle(
+            teacherResponse.awaiting === 'answer'
+              ? textForSubtitle(teacherResponse.speech.join(' '))
+              : '',
+          )
           setIsAudioPending(false)
+          setIsSpeaking(false)
+          setIsPaused(false)
           setAvatarPosture(postureAfterSpeech(teacherResponse.awaiting))
         }
 
@@ -248,7 +285,13 @@ export function SessionPage({
 
         return null
       })
-      .catch(handleSpeechError)
+      .catch((error) => {
+        if (token === actionToken.current) {
+          setIsSpeaking(false)
+          setIsPaused(false)
+        }
+        handleSpeechError(error)
+      })
   }, [
     environment.id,
     sendEvent,
@@ -261,6 +304,18 @@ export function SessionPage({
     teacherResponse.avatar_state,
     handleSpeechError,
   ])
+
+  function togglePause() {
+    if (isPaused) {
+      resumeSpeech()
+      setIsPaused(false)
+      setAvatarPosture(speakingPosture.current)
+    } else {
+      pauseSpeech()
+      setIsPaused(true)
+      setAvatarPosture('idle')
+    }
+  }
 
   function chooseTopic(topicIndex) {
     if (isBusy) {
@@ -299,6 +354,8 @@ export function SessionPage({
     // The quiz covers the lecture, so Regina stops talking.
     actionToken.current += 1
     stopSpeech()
+    setIsSpeaking(false)
+    setIsPaused(false)
     setSubtitle('')
     setAvatarPosture('idle')
 
@@ -465,6 +522,8 @@ export function SessionPage({
           data-pdf-slide-slot
         >
           <PdfSlideViewer
+            // The tutor's laptop is narrow: fill its width and scroll down the page.
+            fitWidth={environment.id === 'private-tutor'}
             pdfUrl={pdfUrl}
             slideNumber={currentSlide}
             topicTitle={currentTopic?.title}
@@ -488,6 +547,19 @@ export function SessionPage({
             {isBusy && <img className="session-flow-spinner" src={loadingIcon} alt="" />}
             <span>{stageStatus}</span>
           </div>
+        )}
+
+        {isSpeaking && (
+          <button
+            className={isPaused ? 'speech-pause-button paused' : 'speech-pause-button'}
+            type="button"
+            onClick={togglePause}
+            aria-label={isPaused ? 'Resume Regina' : 'Pause Regina'}
+            aria-pressed={isPaused}
+          >
+            <PauseIcon paused={isPaused} />
+            <span>{isPaused ? 'Resume' : 'Pause'}</span>
+          </button>
         )}
 
         {subtitle && (
