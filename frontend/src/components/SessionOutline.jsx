@@ -15,6 +15,23 @@ function TopicControlIcon({ kind }) {
   return <img className="topic-control-icon" src={playIcon} alt="" />
 }
 
+// A small pixel-art padlock for the quiz until every topic is completed.
+function QuizLockIcon() {
+  return (
+    <svg
+      className="topic-control-icon quiz-lock-icon"
+      viewBox="0 0 10 10"
+      shapeRendering="crispEdges"
+      aria-hidden="true"
+    >
+      <path d="M3 1h4v1h1v3H7V2H3v3H2V2h1z" fill="#f0aa78" />
+      <path d="M1 5h8v5H1z" fill="#f0aa78" />
+      <path d="M2 6h6v3H2z" fill="#8f593f" />
+      <path d="M4 6h2v2H4z" fill="#1c1311" />
+    </svg>
+  )
+}
+
 function TopicSummaryIcon() {
   return <img className="topic-summary-icon" src={summaryIcon} alt="" />
 }
@@ -29,7 +46,26 @@ export function SessionOutline({
   outline = [],
   pendingTopic = null,
   showLectureSummary = false,
+  quizAvailable = false,
+  quizDisabled = false,
+  quizLoading = false,
+  quizTaken = false,
+  onStartQuiz,
 }) {
+  const quizLocked = !quizAvailable
+  const quizButtonDisabled = quizLocked || quizDisabled
+  // Like the topics: the name gives the same quiz again, the replay icon new questions.
+  const quizTitleLabel = quizLocked
+    ? 'Complete every topic to unlock the quiz'
+    : quizTaken
+      ? 'Retake the same quiz'
+      : 'Start the quiz'
+  const quizIconLabel = quizLocked
+    ? quizTitleLabel
+    : quizTaken
+      ? 'New quiz questions'
+      : 'Start the quiz'
+
   return (
     <aside className="session-outline" aria-label="Session outline">
       <h2>Session Outline</h2>
@@ -91,6 +127,47 @@ export function SessionOutline({
             <span>Lecture summary</span>
           </button>
         )}
+
+        <div
+          className={[
+            'session-topic',
+            'session-quiz',
+            quizLocked ? 'locked' : '',
+            quizLoading ? 'pending' : '',
+          ].join(' ')}
+        >
+          <button
+            className="session-topic-title"
+            disabled={quizButtonDisabled}
+            type="button"
+            onClick={() => onStartQuiz(quizTaken ? 'restart' : 'new')}
+            title={quizTitleLabel}
+          >
+            <span>Quiz</span>
+            {quizLocked && (
+              <small className="session-quiz-hint">Finish every topic to unlock</small>
+            )}
+          </button>
+
+          <div className="session-topic-actions">
+            <button
+              className="topic-play-button"
+              disabled={quizButtonDisabled}
+              type="button"
+              onClick={() => onStartQuiz('new')}
+              title={quizIconLabel}
+              aria-label={quizIconLabel}
+            >
+              {quizLocked ? (
+                <QuizLockIcon />
+              ) : (
+                <TopicControlIcon
+                  kind={quizLoading ? 'loading' : quizTaken ? 'replay' : 'play'}
+                />
+              )}
+            </button>
+          </div>
+        </div>
       </div>
     </aside>
   )
