@@ -1,162 +1,114 @@
 # StudyMate
 
-**StudyMate turns lecture PDFs into interactive AI-led study sessions.**
-
-Built for the **ForgeHacks 2026 AI + Education Track**, StudyMate aims to help students move beyond memorization by actively explaining concepts, asking questions, giving feedback, tracking weak areas, and keeping the learning experience interactive.
+**Your lecture slides, brought to life.** StudyMate turns lecture PDFs into interactive AI-taught lessons that explain, ask, listen, and adapt to what students find difficult.
 
 ## Why StudyMate?
 
-Lecture slides are usually designed to support a professor's explanation, not replace it. They often contain brief text, diagrams, formulas, and examples that can be difficult to understand alone.
+Lecture slides often contain diagrams, formulas, and brief bullet points that make sense *with a professor*, but not always alone. Students who miss class or prefer independent study are left searching YouTube for videos that don't match their lecture, or uploading their slides to an AI chatbot and repeatedly prompting it to explain, continue, or get back on track.
 
-Uploading the slides to a normal AI chatbot can help, but the experience is still very different from attending a real lecture: the AI can lose its place, explanations become disconnected from the slides, and asking questions can interrupt the original flow.
+**StudyMate makes the lecture itself teachable.** Instead of leaving students to manage a chat, it guides them through their own material in a structured, interactive session.
 
-StudyMate was built to make studying a lecture feel more like **actually being taught it**.
+## The Experience
 
----
+1. **Upload a PDF.** StudyMate reads slide text and interprets meaningful diagrams and visual content.
+2. **Follow a lesson plan.** AI reorganizes the lecture into a logical, slide-grounded topic outline.
+3. **Choose your teacher.** Study in a **Lecture Hall**, with a **Private Tutor**, or at a **Study Café**, three expressive on-screen characters with different teaching styles.
+4. **Learn actively.** Hear explanations with synchronized slides and subtitles. Answer conceptual questions, receive feedback and hints, and retry when needed.
+5. **Stay in control.** Raise your hand to interrupt, ask a question, and resume where you left off; replay topics with fresh explanations.
+6. **Practice what matters.** A final adaptive quiz revisits weak concepts identified from your answers during the session.
 
-## What It Does
+## Screenshots
 
-1. Upload a lecture PDF.
-2. StudyMate analyzes each slide, including important diagrams and visual content.
-3. The lecture is reorganized into a logical topic-based outline.
-4. Choose one of three learning environments:
-   - **Lecture Hall** — Professor Regina
-   - **Private Tutor** — one-on-one tutoring
-   - **Study Café** — casual study-friend experience
-5. Regina teaches each topic aloud while the relevant PDF slide stays synchronized.
-6. The AI asks questions during the lesson and evaluates the student's answers.
-7. Wrong answers receive hints and another attempt instead of immediately revealing the solution.
-8. Students can **raise their hand** during an explanation, ask a question, and resume from the exact point where the lecture stopped.
-9. Completed topics can be replayed with a different explanation.
-10. Topics the student struggles with are stored so they can be emphasized in the final adaptive quiz.
+### Home
 
----
+<p align="center">
+  <a href="screenshots/homepage.png">
+    <img src="screenshots/homepage.png" alt="StudyMate home page" width="95%">
+  </a>
+</p>
+
+### Getting Started
+
+| Upload Your Lecture | Choose Your Environment |
+|:---:|:---:|
+| <a href="screenshots/uploadpage.png"><img src="screenshots/uploadpage.png" alt="Upload a lecture PDF" width="100%"></a> | <a href="screenshots/chooseenviromentpage.png"><img src="screenshots/chooseenviromentpage.png" alt="Choose a learning environment" width="100%"></a> |
+
+### Learning Environments
+
+| Lecture Hall | Private Tutor | Study Café |
+|:---:|:---:|:---:|
+| <a href="screenshots/lecturehallpage.png"><img src="screenshots/lecturehallpage.png" alt="Lecture Hall teaching interface" width="100%"></a> | <a href="screenshots/privatetutorpage.png"><img src="screenshots/privatetutorpage.png" alt="Private Tutor teaching interface" width="100%"></a> | <a href="screenshots/cafepage.png"><img src="screenshots/cafepage.png" alt="Study Café teaching interface" width="100%"></a> |
+
+*Click any screenshot to view it at full size.*
+
+## Demo Video
+
+<!-- Replace this placeholder with the public demo link when it is ready.
+     Example: [Watch the StudyMate demo](https://youtu.be/YOUR_VIDEO_ID) -->
+
+*Demo video coming soon.*
 
 ## How It Works
 
-```text
-Upload PDF
-    ↓
-PyMuPDF processes slides
-    ↓
-Visual slides → Featherless multimodal analysis
-    ↓
-AI creates topic-based lecture outline
-    ↓
-LangGraph manages the teaching session
-    ↓
-Explain → Question → Evaluate → Feedback
-    ↓
-Track weak topics
-    ↓
-Adaptive final quiz
-```
+StudyMate uses **PyMuPDF** and **Featherless AI** to interpret slide text and visuals, then generates a slide-grounded lesson plan. **LangGraph** orchestrates the session: teaching, questioning, evaluating answers, handling interruptions, and tracking weak areas. **React**, **PDF.js**, and **Fish Audio** bring that workflow into an interactive classroom.
 
-The **LangGraph** agent keeps track of the current topic, current slide, explanation position, completed topics, questions, answers, conversation context, and topics the student needs to improve.
+### Agent Workflow
 
-This allows StudyMate to behave like one continuous lesson instead of a sequence of disconnected chatbot messages.
+<!-- Replace this placeholder with the final workflow image, for example:
+     ![StudyMate agent workflow](docs/agent-workflow.png)
+     Add the image file to the repository and update the path accordingly. -->
 
----
+*Detailed agent workflow diagram coming soon.*
 
-## Key Features
+**The AI is more than a wrapper:** Featherless AI processes visual slides and generates teaching content; Pydantic checks structured outputs; and LangGraph maintains the state of each lesson—topic, slide, spoken segment, questions, progress, and weak areas—so student interruptions don't derail the experience.
 
-- AI-generated lecture outline
-- Multimodal understanding of diagrams and visual slides
-- Three different tutor personalities
-- Spoken AI explanations
-- Synchronized PDF slides
-- Live subtitles
-- Questions during explanations
-- AI answer evaluation
-- Hints and retries
-- Raise-hand interruptions
-- Exact explanation resume
-- Topic replay with a new explanation
-- Weak-topic tracking
-- Adaptive final quiz
+**Tech stack:** React, JavaScript, HTML, CSS, Vite, PDF.js · Python, FastAPI, LangGraph, Pydantic, PyMuPDF, HTTPX · Featherless AI · Fish Audio.
 
----
+## Run Locally
 
-## Tech Stack
+**Requirements:** Python, Node.js/npm, a Featherless AI API key, and a Fish Audio API key.
 
-**Frontend:** React, JavaScript, HTML, CSS, Vite, PDF.js
-
-**Backend:** Python, FastAPI, Pydantic, PyMuPDF, HTTPX
-
-**AI Workflow:** LangGraph
-
-**LLM & Multimodal AI:** Featherless AI
-
-**Text-to-Speech:** Fish Audio
-
----
-
-# Run Locally
-
-## 1. Clone the repository
+### 1. Clone
 
 ```bash
 git clone https://github.com/bushramagdy3/StudyMate.git
 cd StudyMate
 ```
 
-## 2. Backend
+### 2. Backend
 
 ```bash
 cd backend
 python -m venv venv
 ```
 
-Activate the environment.
+Activate the virtual environment:
 
-### Windows
+- Windows: `venv\Scripts\activate`
+- macOS/Linux: `source venv/bin/activate`
 
-```bash
-venv\Scripts\activate
-```
-
-### macOS / Linux
-
-```bash
-source venv/bin/activate
-```
-
-Install dependencies:
+Then:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-Create:
-
-```text
-backend/.env
-```
-
-Add these two API keys:
+Create `backend/.env` with **only these two required keys**:
 
 ```env
 FEATHERLESS_API_KEY=your_featherless_api_key
 FISH_AUDIO_API_KEY=your_fish_audio_api_key
 ```
 
-Start the backend:
+Start the backend (from `backend/`):
 
 ```bash
 uvicorn main:app --reload
 ```
 
-The backend runs at:
+### 3. Frontend
 
-```text
-http://127.0.0.1:8000
-```
-
----
-
-## 3. Frontend
-
-Open another terminal:
+In a **new terminal**, from the project root:
 
 ```bash
 cd frontend
@@ -164,57 +116,16 @@ npm install
 npm run dev
 ```
 
-Then open the local URL shown by Vite, usually:
+Open the local URL Vite prints (usually `http://localhost:5173`). The frontend connects to the backend at `http://127.0.0.1:8000` by default.
 
-```text
-http://localhost:5173
-```
+### API Availability
 
----
+The project requires working Featherless AI and Fish Audio keys. Fish Audio's current `s2.1-pro-free` model is advertised as free **through November 30, 2026**; after that, access or the integration may need updating. See [Fish Audio's announcement](https://beta.fish.audio/blog/s2-1-pro-free-api/).
 
-## API Notice
+## What's Next
 
-StudyMate depends on external AI APIs, so API availability depends on the providers and the API keys being used.
-
-The project currently uses Fish Audio's:
-
-```text
-s2.1-pro-free
-```
-
-Fish Audio currently states that free access to this model is available through **November 30, 2026**. After that date, the free model may be changed, extended, or become unavailable, which could cause StudyMate's text-to-speech feature to stop working until the integration is updated.
-
-Featherless AI also requires a valid API key and available API credits.
+Persistent student learning histories to adapt teaching across lectures, plus more study environments, voices, characters, and finer-grained personalization.
 
 ---
 
-## Project Structure
-
-```text
-StudyMate/
-├── backend/
-│   ├── agent/          # LangGraph teaching workflow
-│   ├── main.py         # FastAPI routes, PDF processing and TTS
-│   └── requirements.txt
-│
-├── frontend/
-│   ├── public/         # Pregenerated audio
-│   ├── src/
-│   │   ├── assets/
-│   │   ├── components/
-│   │   ├── pages/
-│   │   └── utils/
-│   └── package.json
-│
-└── README.md
-```
-
----
-
-## ForgeHacks 2026
-
-StudyMate was built around the Education Track challenge:
-
-> **Build an AI-powered solution that helps learners move beyond memorization, understand concepts, make connections, and apply what they learn.**
-
-Instead of making another AI that simply answers questions, StudyMate tries to create an AI that **actually teaches, interacts, remembers, and adapts to the learner.**
+*Submitted to ForgeHacks 2026 · AI + Education.*
