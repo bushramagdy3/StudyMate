@@ -121,7 +121,7 @@ uvicorn main:app --reload
 
 ### 3. Frontend
 
-In the terminal, install Node.js:
+If you don't have Node.js Installed, then in the terminal, install Node.js:
 ```bash
 winget install OpenJS.NodeJS.LTS
 ```
