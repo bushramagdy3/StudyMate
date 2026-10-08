@@ -103,6 +103,16 @@ FISH_AUDIO_API_KEY=your_fish_audio_api_key
 GROQ_STT_API_KEY=your_groq_api_key
 ```
 
+OR in the terminal:
+
+```bash
+@"
+FEATHERLESS_API_KEY=your_featherless_key
+FISH_AUDIO_API_KEY=your_fish_audio_key
+GROQ_STT_API_KEY=your_groq_api_key
+"@ | Set-Content -Path .env -Encoding ascii
+```
+
 Start the backend (from `backend/`):
 
 ```bash
@@ -111,9 +121,15 @@ uvicorn main:app --reload
 
 ### 3. Frontend
 
-In a **new terminal**, from the project root:
+In the terminal, install Node.js:
+```bash
+winget install OpenJS.NodeJS.LTS
+```
+
+Then, close and reopen VS Code and in a **new terminal**, from the project root:
 
 ```bash
+cd StudyMate
 cd frontend
 npm install
 npm run dev
