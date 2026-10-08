@@ -13,7 +13,7 @@ Lecture slides often contain diagrams, formulas, and brief bullet points that ma
 1. **Upload a PDF.** StudyMate reads slide text and interprets meaningful diagrams and visual content.
 2. **Follow a lesson plan.** AI reorganizes the lecture into a logical, slide-grounded topic outline.
 3. **Choose your teacher.** Study in a **Lecture Hall**, with a **Private Tutor**, or at a **Study Café**, three expressive on-screen characters with different teaching styles.
-4. **Learn actively.** Hear explanations with synchronized slides and subtitles. Answer conceptual questions, receive feedback and hints, and retry when needed.
+4. **Learn actively.** Hear explanations with synchronized slides and subtitles. Answer conceptual questions by typing or recording your voice, receive feedback and hints, and retry when needed.
 5. **Stay in control.** Raise your hand to interrupt, ask a question, and resume where you left off; replay topics with fresh explanations.
 6. **Practice what matters.** A final adaptive quiz revisits weak concepts identified from your answers during the session.
 
@@ -50,7 +50,9 @@ Lecture slides often contain diagrams, formulas, and brief bullet points that ma
 
 ## How It Works
 
-StudyMate uses **PyMuPDF** and **Featherless AI** to interpret slide text and visuals, then generates a slide-grounded lesson plan. **LangGraph** orchestrates the session: teaching, questioning, evaluating answers, handling interruptions, and tracking weak areas. **React**, **PDF.js**, and **Fish Audio** bring that workflow into an interactive classroom.
+StudyMate uses **PyMuPDF** and **Featherless AI** to interpret slide text and visuals, then generates a slide-grounded lesson plan. **LangGraph** orchestrates the session: teaching, questioning, evaluating answers, handling interruptions, and tracking weak areas. **React**, **PDF.js**, **Fish Audio**, and **Groq Whisper** bring that workflow into an interactive classroom.
+
+Students can also record an answer or question. **Groq Whisper** transcribes it with lecture context, then places the editable transcript in the normal text field before the student sends it. If voice input is unavailable, typing remains available.
 
 ### Agent Workflow
 
@@ -62,11 +64,11 @@ StudyMate uses **PyMuPDF** and **Featherless AI** to interpret slide text and vi
 
 **The AI is more than a wrapper:** Featherless AI processes visual slides and generates teaching content; Pydantic checks structured outputs; and LangGraph maintains the state of each lesson—topic, slide, spoken segment, questions, progress, and weak areas—so student interruptions don't derail the experience.
 
-**Tech stack:** React, JavaScript, HTML, CSS, Vite, PDF.js · Python, FastAPI, LangGraph, Pydantic, PyMuPDF, HTTPX · Featherless AI · Fish Audio.
+**Tech stack:** React, JavaScript, HTML, CSS, Vite, PDF.js · Python, FastAPI, LangGraph, Pydantic, PyMuPDF, HTTPX · Featherless AI · Fish Audio · Groq Whisper.
 
 ## Run Locally
 
-**Requirements:** Python, Node.js/npm, a Featherless AI API key, and a Fish Audio API key.
+**Requirements:** Python, Node.js/npm, a Featherless AI API key, and a Fish Audio API key. A Groq API key is optional but required for voice answers.
 
 ### 1. Clone
 
@@ -93,11 +95,12 @@ Then:
 pip install -r requirements.txt
 ```
 
-Create `backend/.env` with **only these two required keys**:
+Create `backend/.env` with the required teaching and speech keys, plus the optional voice-transcription key:
 
 ```env
 FEATHERLESS_API_KEY=your_featherless_api_key
 FISH_AUDIO_API_KEY=your_fish_audio_api_key
+GROQ_STT_API_KEY=your_groq_api_key
 ```
 
 Start the backend (from `backend/`):
@@ -120,7 +123,7 @@ Open the local URL Vite prints (usually `http://localhost:5173`). The frontend c
 
 ### API Availability
 
-The project requires working Featherless AI and Fish Audio keys. Fish Audio's current `s2.1-pro-free` model is advertised as free **through November 30, 2026**; after that, access or the integration may need updating. See [Fish Audio's announcement](https://beta.fish.audio/blog/s2-1-pro-free-api/).
+The project requires working Featherless AI and Fish Audio keys. Fish Audio's current `s2.1-pro-free` model is advertised as free **through November 30, 2026**; after that, access or the integration may need updating. See [Fish Audio's announcement](https://beta.fish.audio/blog/s2-1-pro-free-api/). Voice answers additionally use Groq Whisper when `GROQ_STT_API_KEY` is configured; the rest of the study session works normally without it.
 
 ## What's Next
 
