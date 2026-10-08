@@ -1,14 +1,9 @@
 import { useState } from 'react'
 import closeButton from '../assets/about/close-button.png'
-import gotItBackground from '../assets/about/got-it-background.png'
 import popupPanel from '../assets/about/popup-panel.png'
 import loadingIcon from '../assets/generated-icons/outline-loading.gif'
 
 const OPTION_LETTERS = ['A', 'B', 'C', 'D']
-
-function joinTitles(topics) {
-  return topics.map((topic) => topic.title).join(', ')
-}
 
 // An option picked, or something typed (not just spaces).
 function isAnswered(answer) {
@@ -23,8 +18,7 @@ function AnswerText({ code, children }) {
 function PopupButton({ children, disabled = false, onClick }) {
   return (
     <button
-      className="got-it-button quiz-button"
-      style={{ backgroundImage: `url(${gotItBackground})` }}
+      className="quiz-action-button"
       disabled={disabled}
       type="button"
       onClick={onClick}
@@ -71,18 +65,13 @@ function QuizQuestions({ quiz, isSubmitting, onSubmit }) {
     <>
       <header className="quiz-header">
         <h2 id="quiz-title">Quiz</h2>
-        <p className="quiz-meta">
-          Question {current + 1} of {quiz.questions.length} · {question.topic_title}
-        </p>
-        {quiz.focus_topics.length > 0 && (
-          <p className="quiz-focus">Focused on: {joinTitles(quiz.focus_topics)}</p>
-        )}
-        {quiz.style_note && current === 0 && (
-          <p className="quiz-style-note">{quiz.style_note}</p>
-        )}
+        <div className="quiz-context">
+          <span className="quiz-progress">Question {current + 1} / {quiz.questions.length}</span>
+          <span className="quiz-topic">{question.topic_title}</span>
+        </div>
       </header>
 
-      <div className="topic-summary-reading quiz-body taking" tabIndex="0">
+      <div className="quiz-question-panel">
         {/* key: each question pops in like the panels. */}
         <p className="quiz-question" key={question.index}>
           {question.question}
@@ -154,7 +143,7 @@ function QuizResults({ result, onRetake, onNewQuiz, onClose }) {
         </p>
       </header>
 
-      <div className="topic-summary-reading quiz-body" tabIndex="0">
+      <div className="quiz-results-panel" tabIndex="0">
         <p className="quiz-feedback">{result.feedback}</p>
 
         {result.topics_to_improve.length > 0 && (

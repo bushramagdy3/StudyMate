@@ -53,15 +53,7 @@ export function MessageBar({
   }, [])
 
   const startRecording = async () => {
-    if (voiceDisabled || voiceProcessing) return
-    if (!['answer', 'question'].includes(awaiting)) {
-      onVoiceError?.(new Error('Wait for Regina to ask a question or invite your question first.'))
-      return
-    }
-    if (disabled) {
-      onVoiceError?.(new Error('Regina is still finishing her response. Please try the mic in a moment.'))
-      return
-    }
+    if (disabled || voiceDisabled || voiceProcessing || !['answer', 'question'].includes(awaiting)) return
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
       onVoiceError?.(new Error('Voice recording is not supported in this browser. Type your response instead.'))
       return
@@ -147,7 +139,7 @@ export function MessageBar({
       <button
         className={`voice-control${isRecording ? ' voice-control--recording' : ''}${voiceProcessing ? ' voice-control--processing' : ''}`}
         type="button"
-        disabled={isRecording ? false : voiceDisabled || voiceProcessing}
+        disabled={isRecording ? false : disabled || voiceDisabled || voiceProcessing || !['answer', 'question'].includes(awaiting)}
         onClick={isRecording ? stopRecording : startRecording}
         aria-label={isRecording ? 'Stop recording' : voiceDisabled ? 'Voice input is unavailable' : 'Record an answer or question'}
         title={isRecording ? 'Stop recording' : voiceDisabled ? 'Voice input is unavailable' : 'Record an answer or question'}
