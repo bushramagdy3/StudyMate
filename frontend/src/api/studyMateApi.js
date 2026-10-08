@@ -7,6 +7,7 @@ const SESSION_READ_TIMEOUT_MS = 30_000
 const SESSION_DELETE_TIMEOUT_MS = 20_000
 const QUIZ_START_TIMEOUT_MS = 90_000
 const QUIZ_SUBMIT_TIMEOUT_MS = 60_000 // typed answers are graded by the LLM
+const TRANSCRIPTION_TIMEOUT_MS = 45_000
 
 function trackedRequest(externalSignal, timeoutMs, timeoutMessage) {
   const controller = new AbortController()
@@ -64,14 +65,21 @@ async function readJsonResponse(response) {
 
   let message = 'Request failed.'
 
+  let data
   try {
-    const data = await response.json()
-    message = data.detail || message
+    data = await response.json()
   } catch {
     message = response.statusText || message
   }
 
-  throw new Error(message)
+  message = typeof data?.detail === 'string'
+    ? data.detail
+    : data?.detail?.message || message
+
+  const error = new Error(message)
+  error.status = response.status
+  error.code = typeof data?.detail === 'object' ? data.detail?.code : undefined
+  throw error
 }
 
 export async function startSession({ environmentId, pdfFile, signal }) {
@@ -175,6 +183,32 @@ async function postJson(path, body, signal, timeoutMs, timeoutMessage) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(body),
+      signal: request.controller.signal,
+    })
+
+    return await readJsonResponse(response)
+  } catch (error) {
+    request.throwIfTimedOut(error)
+  } finally {
+    request.finish()
+  }
+}
+
+export async function transcribeAudio(sessionId, audio, signal) {
+  const request = trackedRequest(
+    signal,
+    TRANSCRIPTION_TIMEOUT_MS,
+    'Transcribing your recording took too long. Please type your response instead.',
+  )
+  const formData = new FormData()
+  formData.append('audio', new File([audio], 'student-answer.webm', {
+    type: audio.type || 'audio/webm',
+  }))
+
+  try {
+    const response = await fetch(`${apiBaseUrl}/api/sessions/${sessionId}/transcribe`, {
+      method: 'POST',
+      body: formData,
       signal: request.controller.signal,
     })
 

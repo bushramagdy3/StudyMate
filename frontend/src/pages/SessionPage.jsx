@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { sendSessionEvent, startQuiz, submitQuiz } from '../api/studyMateApi.js'
+import {
+  sendSessionEvent,
+  startQuiz,
+  submitQuiz,
+  transcribeAudio,
+} from '../api/studyMateApi.js'
 import { MessageBar } from '../components/MessageBar.jsx'
 import { PdfSlideViewer } from '../components/PdfSlideViewer.jsx'
 import { QuizPopup } from '../components/QuizPopup.jsx'
@@ -48,6 +53,8 @@ export function SessionPage({
   const [pendingAction, setPendingAction] = useState(null)
   const [subtitle, setSubtitle] = useState('')
   const [isAudioPending, setIsAudioPending] = useState(false)
+  const [isTranscribing, setIsTranscribing] = useState(false)
+  const [voiceUnavailable, setVoiceUnavailable] = useState(false)
   const [avatarPosture, setAvatarPosture] = useState('idle')
   const [isLectureSummaryOpen, setIsLectureSummaryOpen] = useState(false)
   // The mini quiz: the questions, the marked result, and which view is showing
@@ -351,10 +358,14 @@ export function SessionPage({
   }
 
   function sendMessage(text) {
-    if (isBusy) {
+    if (isBusy || isTranscribing) {
       return
     }
 
+    submitMessage(text)
+  }
+
+  function submitMessage(text) {
     const isAnswer = teacherResponse.awaiting === 'answer'
     const eventType = isAnswer ? 'answer' : 'question'
     sendEvent(
@@ -367,6 +378,40 @@ export function SessionPage({
         topicIndex: teacherResponse.current_topic,
       },
     )
+  }
+
+  async function handleVoiceRecording(recording) {
+    if (isBusy || isTranscribing || voiceUnavailable) return
+
+    const controller = new AbortController()
+    eventRequests.current.add(controller)
+    setIsTranscribing(true)
+
+    try {
+      const response = await transcribeAudio(
+        teacherResponse.session_id,
+        recording,
+        controller.signal,
+      )
+      const transcript = response?.text?.trim()
+      if (!transcript) {
+        throw new Error('We could not hear a response. Please try recording again or type it instead.')
+      }
+
+      return transcript
+    } catch (error) {
+      if (error?.name !== 'AbortError') {
+        if (error?.code === 'voice_limit_reached' || error?.status === 429) {
+          setVoiceUnavailable(true)
+        }
+        onError?.(error, 'Could not transcribe your recording')
+      }
+    } finally {
+      eventRequests.current.delete(controller)
+      setIsTranscribing(false)
+    }
+
+    return ''
   }
 
   return (
@@ -447,9 +492,13 @@ export function SessionPage({
       <MessageBar
         awaiting={teacherResponse.awaiting}
         canRaiseHand={teacherResponse.can_raise_hand}
-        disabled={isBusy}
+        disabled={isBusy || isTranscribing}
+        voiceDisabled={voiceUnavailable}
+        voiceProcessing={isTranscribing}
         onRaiseHand={raiseHand}
         onSendMessage={sendMessage}
+        onVoiceRecording={handleVoiceRecording}
+        onVoiceError={(error) => onError?.(error, 'Voice input is unavailable')}
       />
 
       <TopicSummaryPopup

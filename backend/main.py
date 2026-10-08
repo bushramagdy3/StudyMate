@@ -375,6 +375,110 @@ FISH_MODEL = "s2.1-pro-free"
 FISH_TTS_TIMEOUT_SECONDS = 20.0
 FISH_TTS_MAX_ATTEMPTS = 2
 
+# Groq Whisper is only used for optional student voice input. The rest of the
+# app continues to use Featherless for teaching and Fish for Regina's speech.
+GROQ_STT_URL = "https://api.groq.com/openai/v1/audio/transcriptions"
+GROQ_STT_MODEL = "whisper-large-v3-turbo"
+GROQ_STT_TIMEOUT_SECONDS = 35.0
+GROQ_STT_MAX_BYTES = 25 * 1024 * 1024
+
+
+def groq_stt_api_key() -> str:
+    api_key = os.getenv("GROQ_STT_API_KEY")
+    if not api_key:
+        raise HTTPException(
+            status_code=500,
+            detail="Missing GROQ_STT_API_KEY in backend/.env.",
+        )
+    return api_key
+
+
+async def transcribe_student_audio(
+    audio: UploadFile,
+    session: TeacherResponse,
+    transport: httpx.AsyncBaseTransport | None = None,
+) -> str:
+    """Transcribe one recorded student response with concise lecture context."""
+    content_type = (audio.content_type or "audio/webm").split(";", 1)[0]
+    if content_type not in {
+        "audio/webm",
+        "audio/ogg",
+        "audio/wav",
+        "audio/mpeg",
+        "audio/mp4",
+    }:
+        raise HTTPException(status_code=400, detail="Unsupported recording format.")
+
+    audio_bytes = await audio.read()
+    if not audio_bytes:
+        raise HTTPException(status_code=400, detail="The recording is empty.")
+    if len(audio_bytes) > GROQ_STT_MAX_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail="The recording is too large. Please keep it under 25 MB.",
+        )
+
+    topic_names = ", ".join(topic.title for topic in session.outline[:12])
+    prompt = (
+        "This is a student response in an interactive lecture. Transcribe the "
+        "student faithfully, using these lecture terms when they are spoken: "
+        f"{topic_names or 'general academic terms'}. Preserve the student's "
+        "intent. Return only the cleaned transcript, without commentary."
+    )
+    filename = audio.filename or "student-answer.webm"
+
+    try:
+        async with httpx.AsyncClient(
+            timeout=GROQ_STT_TIMEOUT_SECONDS,
+            transport=transport,
+        ) as client:
+            response = await client.post(
+                GROQ_STT_URL,
+                headers={"Authorization": f"Bearer {groq_stt_api_key()}"},
+                data={"model": GROQ_STT_MODEL, "prompt": prompt},
+                files={"file": (filename, audio_bytes, content_type)},
+            )
+    except httpx.HTTPError as error:
+        raise HTTPException(
+            status_code=502,
+            detail="Voice transcription could not be reached. Please type your response instead.",
+        ) from error
+
+    if response.status_code == 429:
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "code": "voice_limit_reached",
+                "message": (
+                    "Voice input has reached its free-tier limit. "
+                    "Please type your response instead."
+                ),
+            },
+        )
+    if response.status_code != 200:
+        raise HTTPException(
+            status_code=502,
+            detail=(
+                "Voice transcription failed. Please try again or type your "
+                "response instead."
+            ),
+        )
+
+    try:
+        transcript = response.json().get("text", "").strip()
+    except (ValueError, AttributeError):
+        transcript = ""
+    if not transcript:
+        raise HTTPException(
+            status_code=502,
+            detail=(
+                "Voice transcription returned no text. Please try again or "
+                "type your response instead."
+            ),
+        )
+
+    return transcript
+
 
 def fish_audio_api_key() -> str:
     api_key = os.getenv("FISH_AUDIO_API_KEY")
@@ -512,6 +616,20 @@ def get_session(session_id: str):
         return get_teacher().get_session(session_id)
     except SessionNotFound:
         raise session_not_found(session_id)
+
+
+@app.post("/api/sessions/{session_id}/transcribe")
+async def transcribe_session_audio(
+    session_id: str,
+    audio: UploadFile = File(...),
+):
+    try:
+        session = get_teacher().get_session(session_id)
+    except SessionNotFound:
+        raise session_not_found(session_id)
+
+    transcript = await transcribe_student_audio(audio, session)
+    return {"text": transcript}
 
 
 @app.delete("/api/sessions/{session_id}", status_code=204)

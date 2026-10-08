@@ -1,0 +1,86 @@
+.voice-control {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: clamp(46px, 4.1vw, 68px);
+  min-width: clamp(46px, 4.1vw, 68px);
+  height: 76%;
+  padding: 0;
+  border: 3px solid #8f543c;
+  outline: 2px solid #231513;
+  background: #3c2824;
+  cursor: pointer;
+  image-rendering: pixelated;
+}
+
+.voice-control:hover:not(:disabled),
+.voice-control:focus-visible:not(:disabled) {
+  background: #684032;
+  border-color: #f1a46f;
+}
+
+.voice-control:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.voice-control--recording {
+  background: #a44c38;
+  border-color: #ffd18c;
+  animation: voice-pulse 0.9s steps(2, end) infinite;
+}
+
+.voice-control__icon {
+  display: block;
+  height: 68%;
+  image-rendering: pixelated;
+  object-fit: contain;
+  width: 68%;
+}
+
+.voice-control__icon.is-loading {
+  height: 76%;
+  width: 76%;
+}
+
+.voice-input-shell {
+  flex: 1 1 auto;
+  height: 76%;
+  min-width: 0;
+  position: relative;
+}
+
+.voice-input-shell .message-input {
+  height: 100%;
+  width: 100%;
+}
+
+.voice-recording-display {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  inset: 0;
+  min-width: 0;
+  height: 100%;
+  padding: 0 2.15%;
+  border: clamp(3px, 0.24vw, 4px) solid #f1b382;
+  box-shadow:
+    0 0 0 clamp(2px, 0.18vw, 3px) #120d0b,
+    inset 0 0 0 clamp(2px, 0.18vw, 3px) rgba(73, 42, 34, 0.55);
+  background: rgba(47, 30, 26, 0.96);
+  color: #ffe9c8;
+  font: inherit;
+  position: absolute;
+  white-space: nowrap;
+  z-index: 1;
+}
+
+.voice-recording-display img {
+  height: clamp(24px, 2vw, 34px);
+  image-rendering: pixelated;
+  width: clamp(24px, 2vw, 34px);
+}
+
+@keyframes voice-pulse {
+  50% { filter: brightness(1.35); }
+}
