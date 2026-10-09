@@ -10,6 +10,22 @@ The usual workaround is hunting through YouTube videos that rarely match the *en
 
 **StudyMate changes the experience from asking an AI for explanations to actually attending an AI-led lesson built around your own slides.**
 
+## Why StudyMate?
+
+**A lecture is more than an explanation. It's a continuous, interactive experience.**
+
+Traditional lecture slides are built around a professor's presence. Without that professor, students face disconnected diagrams, brief bullet points, and concepts that are difficult to understand independently.
+
+Searching YouTube means jumping between videos that rarely match the exact lecture. Uploading slides to an AI chatbot may generate explanations, but **the student still has to become the instructor**—deciding what comes next, asking for clarification, requesting questions, and repeatedly guiding the AI back to the lecture.
+
+**StudyMate reverses that relationship.**
+
+Instead of waiting for instructions, its stateful AI agent takes responsibility for the lesson. It teaches concepts in sequence, synchronizes explanations with the relevant slides, asks mandatory understanding-check questions, evaluates answers, and provides hints before moving forward.
+
+Students can raise their hand, ask about an earlier concept, and return to the interrupted explanation without losing their place. The agent remembers the lecture's progress, current slide, questions, and areas of difficulty throughout the session.
+
+**It's not chat with your PDF. It's your lecture, brought to life—with a teacher that guides, challenges, and adapts to you.**
+
 ## See StudyMate in Action
 
 ### Home
@@ -137,9 +153,19 @@ Open the URL printed by Vite (usually `http://localhost:5173`). By default, the 
 
 StudyMate needs valid Featherless AI and Fish Audio credentials. The Fish Audio integration currently targets the `s2.1-pro-free` model; free access is advertised through **November 30, 2026** and may change afterward. Groq transcription requires an additional API key, but text input works without it. Do not commit `.env` or API secrets to GitHub.
 
-## What's Next
+### What's Next
 
-We want to make StudyMate progressively more personal: persistent histories across study sessions, teaching approaches informed by each student's past difficulties and preferred explanations, and a broader collection of tutors, voices, personalities, and immersive learning environments. Over time, the goal is an AI tutor that understands **how each student learns**, not just what is written on their slides.
+**A great professor doesn't forget what happened in the previous lecture. Why should an AI tutor?**
+
+Our vision is to evolve StudyMate from an interactive lecture experience into a **continuous, personalized learning companion** that remembers a student's entire academic journey.
+
+Students will be able to organize lecture PDFs into courses, allowing their AI tutor to connect new concepts to previous lectures, remember what they've already studied, and build on earlier knowledge instead of starting from scratch every session.
+
+StudyMate will also track academic progress beyond lectures, including quiz grades, incorrect answers, and difficulties with practice assignments, to develop a deeper understanding of each student's strengths and weaknesses.
+
+The agent will support different learning modes, from **teaching lectures to guiding students through worksheets and practice problems**, while maintaining shared learning context across them.
+
+Combined with more customizable voices, characters, personalities, and environments, our goal is to create something closer to a real professor: **one who knows your course, remembers your progress, understands where you struggle, and grows with you throughout your education.**
 
 ---
 
