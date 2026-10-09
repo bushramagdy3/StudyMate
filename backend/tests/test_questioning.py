@@ -7,6 +7,8 @@ from agent import llm as llm_module
 from agent.contract import Environment, LectureChunk, StartSessionRequest
 from agent.llm import LLM
 from agent.questioning import (
+    TOPIC_EXIT_QUESTIONS,
+    ask_topic_exit_questions,
     ask_prompt,
     fallback_question,
     feedback_prompt,
@@ -209,6 +211,14 @@ def test_finished_topic_is_marked_complete_and_introduces_the_next_topic():
     assert "Pipelining" in update["speech"][0]
     assert "Head-of-Line Blocking" in update["speech"][0]
     assert update["mode"] is Mode.WAITING_TOPIC
+
+
+def test_final_question_prompt_keeps_the_topic_open_for_questions():
+    update = ask_topic_exit_questions(make_state())
+
+    assert update["mode"] is Mode.AWAITING_STUDENT_QUESTION
+    assert update["topic_exit_pending"]
+    assert update["speech"] == [TOPIC_EXIT_QUESTIONS["tutor"]]
 
 
 def test_last_topic_announces_the_quiz_without_auto_advancing():

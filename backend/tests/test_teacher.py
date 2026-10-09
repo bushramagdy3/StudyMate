@@ -61,7 +61,10 @@ def fake_featherless():
             correct = '"right' in full.split("The student answered:")[1]
             reply = {"correct": correct, "response": "Correct!" if correct else "Not quite, try again."}
         elif "raised their hand and asked" in full:
-            return text_reply("Good question. Okay, back to where we were.")
+            return text_reply(json.dumps({
+                "answer": "Good question. Okay, back to where we were.",
+                "slide": 1,
+            }))
         else:
             raise AssertionError(f"unexpected prompt: {prompt[:80]}")
         return text_reply(json.dumps(reply))
@@ -152,7 +155,8 @@ def test_a_whole_lecture_uses_manual_topic_selection(teacher):
     assert praise.speech == ["Correct!"]
     assert praise.awaiting is Awaiting.CONTINUE
 
-    waiting = send(ContinueEvent())
+    send(ContinueEvent())
+    waiting = send(QuestionEvent(text="no"))
     assert waiting.current_topic is None
     assert waiting.completed_topics == [0]
     assert "Next, we will explore Head-of-Line Blocking" in waiting.speech[0]
@@ -164,7 +168,8 @@ def test_a_whole_lecture_uses_manual_topic_selection(teacher):
 
     send(ContinueEvent())
     send(AnswerEvent(text="right"))
-    done = send(ContinueEvent())
+    send(ContinueEvent())
+    done = send(QuestionEvent(text="no"))
     assert done.current_topic is None
     assert done.completed_topics == [0, 1]
     assert done.awaiting is Awaiting.NOTHING
@@ -178,7 +183,8 @@ def test_two_wrong_answers_reveal_then_wait_for_outline(teacher):
     teacher.send_event(session, AnswerEvent(text="no"))
     reveal = teacher.send_event(session, AnswerEvent(text="still no"))
     assert reveal.awaiting is Awaiting.CONTINUE
-    waiting = teacher.send_event(session, ContinueEvent())
+    teacher.send_event(session, ContinueEvent())
+    waiting = teacher.send_event(session, QuestionEvent(text="no"))
     assert waiting.current_topic is None
     assert waiting.completed_topics == [0]
 
@@ -231,12 +237,14 @@ def test_replay_finished_topic_does_not_auto_start_another_topic(teacher):
     send(ContinueEvent())
     send(AnswerEvent(text="right"))
     send(ContinueEvent())
+    send(QuestionEvent(text="no"))
 
     replay = send(RepeatEvent(topic_index=0))
     assert replay.speech == ["e2-s0", "e2-s1", "e2-s2"]
     send(ContinueEvent())
     send(AnswerEvent(text="right"))
-    waiting = send(ContinueEvent())
+    send(ContinueEvent())
+    waiting = send(QuestionEvent(text="no"))
     assert waiting.current_topic is None
     assert waiting.completed_topics == [0]
 
@@ -320,7 +328,8 @@ def test_two_question_topic_continues_with_the_next_part_after_feedback(teacher)
 
     send(ContinueEvent())
     send(AnswerEvent(text="right"))
-    waiting = send(ContinueEvent())
+    send(ContinueEvent())
+    waiting = send(QuestionEvent(text="no"))
     assert waiting.current_topic is None
     assert waiting.completed_topics == [0]
 

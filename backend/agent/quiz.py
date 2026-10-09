@@ -251,7 +251,12 @@ def write_questions(
     """
     outline = state["outline"]
     try:
-        draft = llm.chat_json(messages(QUIZ_SYSTEM_PROMPT, quiz_prompt(state, plan, avoid)), DraftQuiz)
+        draft = llm.chat_json(
+            messages(QUIZ_SYSTEM_PROMPT, quiz_prompt(state, plan, avoid)),
+            DraftQuiz,
+            request_timeout=20,
+            max_attempts=1,
+        )
         written = [clean_draft(q, len(outline)) for q in draft.questions]
         style_note = clean_text(draft.style_note)
     except LLMError:
@@ -441,7 +446,13 @@ def grade_text_answers(llm: LLM, to_grade: list[tuple[int, QuizItem, str]]) -> d
         return {}
     grades: dict[int, tuple[bool, str]] = {}
     try:
-        reply = llm.chat_json(messages(GRADING_SYSTEM_PROMPT, grading_prompt(to_grade)), Grades, temperature=0)
+        reply = llm.chat_json(
+            messages(GRADING_SYSTEM_PROMPT, grading_prompt(to_grade)),
+            Grades,
+            temperature=0,
+            request_timeout=15,
+            max_attempts=1,
+        )
         wanted = {n for n, _, _ in to_grade}
         for grade in reply.grades:
             if grade.index in wanted:

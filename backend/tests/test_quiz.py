@@ -11,6 +11,7 @@ from agent.contract import (
     Environment,
     GoToTopicEvent,
     LectureChunk,
+    QuestionEvent,
     StartSessionRequest,
 )
 from agent.llm import LLM
@@ -349,7 +350,8 @@ def finish_lecture(teacher, first_answer="right"):
         response = send(AnswerEvent(text=first_answer if topic == 1 else "right"))
         if response.awaiting.value == "answer":
             send(AnswerEvent(text="right"))
-        done = send(ContinueEvent())
+        send(ContinueEvent())  # final-question prompt
+        done = send(QuestionEvent(text="no"))
     assert done.quiz_available
     return session
 

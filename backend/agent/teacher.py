@@ -52,7 +52,12 @@ from agent.navigation import (
 )
 from agent.planning import make_plan_node
 from agent.quiz import QuizRecord, answers_problem, mark_quiz, new_quiz, restart_quiz, to_quiz
-from agent.questioning import make_ask_question_node, make_evaluate_answer_node, next_topic
+from agent.questioning import (
+    ask_topic_exit_questions,
+    make_ask_question_node,
+    make_evaluate_answer_node,
+    next_topic,
+)
 from agent.state import (
     Mode,
     TeacherState,
@@ -154,6 +159,7 @@ def build_graph(llm: LLM, checkpointer=None):
     graph.add_node("answer_student_question", make_answer_student_question_node(llm))
     graph.add_node("repeat", make_repeat_node(llm))
     graph.add_node("next_topic", next_topic)
+    graph.add_node("topic_exit_question", ask_topic_exit_questions)
     graph.add_node("closing", make_closing_node(llm))
     graph.add_node("summary", make_summary_node(llm))
     graph.add_node("back_to_lecture", back_to_lecture)
@@ -185,7 +191,7 @@ def build_graph(llm: LLM, checkpointer=None):
     graph.add_conditional_edges(
         "continue",
         after_continue,
-        ["finish_intro", "ask_question", "explain", "next_topic"],
+        ["finish_intro", "ask_question", "explain", "next_topic", "topic_exit_question"],
     )
     graph.add_edge("finish_intro", "wait")
     graph.add_conditional_edges("next_topic", after_next_topic, ["explain", "wait", "closing"])
@@ -197,7 +203,7 @@ def build_graph(llm: LLM, checkpointer=None):
 
     # Everything that speaks goes back to waiting
     for node in [
-        "explain", "ask_question", "evaluate_answer", "answer_student_question",
+        "explain", "ask_question", "evaluate_answer", "answer_student_question", "topic_exit_question",
         "raise_hand", "repeat", "closing", "summary",
     ]:
         graph.add_edge(node, "wait")

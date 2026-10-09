@@ -74,3 +74,27 @@ def test_groq_rate_limit_has_machine_readable_voice_limit_code(monkeypatch):
         assert error.detail["code"] == "voice_limit_reached"
     else:
         raise AssertionError("Expected a free-tier limit error")
+
+
+def test_groq_prompt_echo_is_not_returned_as_a_student_transcript(monkeypatch):
+    monkeypatch.setenv("GROQ_STT_API_KEY", "groq-test-key")
+
+    async def transcribe():
+        return await main.transcribe_student_audio(
+            recording(),
+            session_response(),
+            transport=httpx.MockTransport(
+                lambda request: httpx.Response(
+                    200,
+                    json={"text": "Return only the cleaned transcript, without commentary."},
+                )
+            ),
+        )
+
+    try:
+        run(transcribe())
+    except main.HTTPException as error:
+        assert error.status_code == 502
+        assert "returned no text" in error.detail
+    else:
+        raise AssertionError("Expected an echoed transcription prompt to be rejected")

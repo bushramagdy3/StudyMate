@@ -39,6 +39,7 @@ origins = [
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
+    allow_origin_regex=r"^http://(localhost|127\.0\.0\.1):\d+$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -467,6 +468,10 @@ async def transcribe_student_audio(
     try:
         transcript = response.json().get("text", "").strip()
     except (ValueError, AttributeError):
+        transcript = ""
+    # Whisper occasionally echoes its own prompt for empty or unusable audio.
+    # Never put this internal instruction into the student's text box.
+    if "return only the cleaned transcript" in transcript.lower():
         transcript = ""
     if not transcript:
         raise HTTPException(

@@ -76,7 +76,10 @@ def generate_question(llm: LLM, state: TeacherState) -> PendingQuestion:
     topic = state["outline"][state["current_topic"]]
     try:
         question = llm.chat_json(
-            messages(build_system_prompt(personality), ask_prompt(state)), Question
+            messages(build_system_prompt(personality), ask_prompt(state)),
+            Question,
+            request_timeout=12,
+            max_attempts=1,
         )
         if question.question.strip() and question.expected_answer.strip():
             return PendingQuestion(
@@ -87,6 +90,26 @@ def generate_question(llm: LLM, state: TeacherState) -> PendingQuestion:
     except LLMError:
         pass
     return fallback_question(topic)
+
+
+TOPIC_EXIT_QUESTIONS = {
+    "professor": "[reassuring] Before we close this topic, do you have any final questions about it? We will move on after this, so please ask them now.",
+    "tutor": "[reassuring] Before we wrap this topic, is there anything here you want to clear up? We will not come back to it automatically, so this is the moment to ask.",
+    "study friend": "[thoughtful] Quick last call for this topic: anything still confusing? We are about to move on, so ask me now and we will sort it out.",
+}
+
+
+def ask_topic_exit_questions(state: TeacherState) -> dict:
+    """Give the student one explicit final chance to ask about a finished topic."""
+    role = get_personality(state["environment"]).role
+    return {
+        "mode": Mode.AWAITING_STUDENT_QUESTION,
+        "topic_exit_pending": True,
+        "pending_question": None,
+        "attempts": 0,
+        "speech": [TOPIC_EXIT_QUESTIONS[role]],
+        "speech_slides": [],
+    }
 
 
 def fallback_question(topic: OutlineTopic) -> PendingQuestion:
@@ -178,6 +201,8 @@ def make_evaluate_answer_node(llm: LLM):
             result = llm.chat_json(
                 messages(build_system_prompt(personality), feedback_prompt(state, answer)),
                 AnswerFeedback,
+                request_timeout=15,
+                max_attempts=1,
             )
         except LLMError:
             # Can't grade right now: give the answer, don't count it, and move on.
@@ -256,6 +281,7 @@ def next_topic(state: TeacherState) -> dict:
         "question_points": [],
         "pending_question": None,
         "attempts": 0,
+        "topic_exit_pending": False,
         "speech": [speech],
         "speech_slides": [],
         "mode": mode,

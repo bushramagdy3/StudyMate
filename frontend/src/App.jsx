@@ -60,7 +60,7 @@ function App() {
     environments[0]
   const displayedPage = page === 'session' && !teacherResponse ? 'home' : page
 
-  const showError = useCallback((error, title = 'Something went wrong') => {
+  const showError = useCallback((error, title = 'Something went wrong', onRetry) => {
     if (error?.name === 'AbortError') {
       return
     }
@@ -69,6 +69,7 @@ function App() {
     setDialog({
       kind: 'error',
       title,
+      onRetry,
       message:
         error?.message ||
         (typeof error === 'string' ? error : 'Please try again in a moment.'),
@@ -221,7 +222,9 @@ function App() {
     const dialogKind = dialog?.kind
     setDialog(null)
 
-    if (dialogKind === 'end-session') {
+    if (dialog?.onRetry) {
+      dialog.onRetry()
+    } else if (dialogKind === 'end-session') {
       endSession()
     } else if (dialogKind === 'start-error') {
       openSessionAfterLoading()
@@ -295,14 +298,18 @@ function App() {
               ? 'Leave'
               : dialog.kind === 'start-error'
                 ? 'Try again'
-                : 'Got it'
+                : dialog.onRetry
+                  ? 'Try again'
+                  : 'Got it'
           }
           secondaryLabel={
             dialog.kind === 'end-session'
               ? 'Stay'
               : dialog.kind === 'start-error'
                 ? 'Cancel'
-                : undefined
+                : dialog.onRetry
+                  ? 'Cancel'
+                  : undefined
           }
           onPrimary={handleDialogPrimary}
           onSecondary={() => setDialog(null)}

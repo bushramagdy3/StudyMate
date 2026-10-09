@@ -100,7 +100,7 @@ export function MessageBar({
     !voiceProcessing &&
     ['answer', 'question'].includes(awaiting) &&
     Boolean(message.trim())
-  const isHandRaised = awaiting === 'question'
+  const isHandRaised = awaiting === 'question' && canRaiseHand
 
   function sendMessage() {
     const text = message.trim()
@@ -163,7 +163,7 @@ export function MessageBar({
 
       <button
         className={isHandRaised ? 'raise-hand raised' : 'raise-hand'}
-        disabled={disabled || isRecording || voiceProcessing || (!canRaiseHand && !isHandRaised)}
+        disabled={disabled || isRecording || voiceProcessing || !canRaiseHand}
         type="button"
         aria-pressed={isHandRaised}
         onClick={onRaiseHand}

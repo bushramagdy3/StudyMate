@@ -57,15 +57,17 @@ class LLM:
         messages: list[dict],
         temperature: float = 0.7,
         max_tokens: int | None = None,
+        request_timeout: float | None = None,
+        max_attempts: int = MAX_ATTEMPTS,
     ) -> str:
         """Send a conversation and return the model's reply as plain text."""
         payload = {"model": self.model, "messages": messages, "temperature": temperature}
         if max_tokens is not None:
             payload["max_tokens"] = max_tokens
 
-        for attempt in range(MAX_ATTEMPTS):
+        for attempt in range(max_attempts):
             try:
-                response = self._client.post(FEATHERLESS_URL, json=payload)
+                response = self._client.post(FEATHERLESS_URL, json=payload, timeout=request_timeout)
             except httpx.HTTPError:
                 response = None  # timeout or connection problem: retry
 
@@ -78,12 +80,19 @@ class LLM:
                 # Wrong key, unknown model, bad request: retrying won't help.
                 raise LLMError(f"Featherless error for model {self.model}: {_error_message(response)}")
 
-            if attempt < MAX_ATTEMPTS - 1:
+            if attempt < max_attempts - 1:
                 time.sleep(RETRY_DELAY * 2**attempt)
 
-        raise LLMError(f"No usable reply from {self.model} after {MAX_ATTEMPTS} attempts.")
+        raise LLMError(f"No usable reply from {self.model} after {max_attempts} attempts.")
 
-    def chat_json(self, messages: list[dict], schema: type[T], temperature: float = 0.3) -> T:
+    def chat_json(
+        self,
+        messages: list[dict],
+        schema: type[T],
+        temperature: float = 0.3,
+        request_timeout: float | None = None,
+        max_attempts: int = MAX_ATTEMPTS,
+    ) -> T:
         """Ask for JSON matching `schema` (a pydantic model) and return it validated.
 
         If the reply isn't valid, the model is shown its mistake and asked
@@ -93,7 +102,12 @@ class LLM:
         messages = [*messages, {"role": "user", "content": _json_instructions(schema)}]
 
         for attempt in range(2):
-            reply = self.chat(messages, temperature=temperature)
+            reply = self.chat(
+                messages,
+                temperature=temperature,
+                request_timeout=request_timeout,
+                max_attempts=max_attempts,
+            )
             try:
                 return schema.model_validate(json.loads(_extract_json(reply)))
             except (ValueError, ValidationError) as error:

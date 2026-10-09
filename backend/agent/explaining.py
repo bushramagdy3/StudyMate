@@ -176,6 +176,8 @@ def explain_prompt(state: TeacherState, previous: list[str] | None = None) -> st
         f'- "quick": intuitive, or it mostly builds on ideas already taught. Use {fewest} to '
         f"{count} segments. Skip what the student already knows and focus on what's new.",
         "A topic mixing a familiar idea with one new term is \"normal\": go slowly only on the new term.",
+        "Be conservative: an opening or foundation topic that establishes vocabulary is slow unless it is genuinely trivial. "
+        "Never choose quick merely because a slide is short.",
         "",
         f"Write the explanation as {fewest} to {most} segments (matching the pace), in teaching order.",
         "Each segment is 2 to 4 short spoken sentences about one small idea.",
@@ -217,6 +219,8 @@ def generate_explanation(
             messages(build_system_prompt(personality), explain_prompt(state, previous)),
             Explanation,
             temperature=0.7,
+            request_timeout=30,
+            max_attempts=1,
         )
         pace = explanation.pace
         if previous is not None and pace == "quick":
@@ -443,6 +447,7 @@ def enter_topic(state: TeacherState, topic: int, progress: dict, restart_current
         "topic_progress": progress,
         "pending_question": None,
         "attempts": 0,
+        "topic_exit_pending": False,
     }
     saved = progress.get(topic)
     if saved is None:

@@ -74,6 +74,7 @@ export function SessionPage({
   const [isAudioPending, setIsAudioPending] = useState(false)
   const [isTranscribing, setIsTranscribing] = useState(false)
   const [voiceUnavailable, setVoiceUnavailable] = useState(false)
+  const [speechRetryKey, setSpeechRetryKey] = useState(0)
   const [avatarPosture, setAvatarPosture] = useState('idle')
   // Regina's speech is playing (explaining, asking or answering): show the pause button.
   const [isSpeaking, setIsSpeaking] = useState(false)
@@ -135,7 +136,7 @@ export function SessionPage({
     onTeacherResponseChange(response)
   }, [onTeacherResponseChange])
 
-  const handleSpeechError = useCallback((error) => {
+  const handleSpeechError = useCallback((error, onRetry) => {
     if (error?.name === 'AbortError') {
       return
     }
@@ -143,7 +144,7 @@ export function SessionPage({
     setSubtitle('')
     setIsAudioPending(false)
     setAvatarPosture('idle')
-    onError?.(error, 'Could not play Regina’s response')
+    onError?.(error, 'Could not play Regina’s response', onRetry)
   }, [onError])
 
   const sendEvent = useCallback(async (event, options = {}) => {
@@ -202,7 +203,7 @@ export function SessionPage({
     } catch (error) {
       if (error.name !== 'AbortError' && token === actionToken.current) {
         setAvatarPosture('idle')
-        onError?.(error, 'Could not continue the session')
+        onError?.(error, 'Could not continue the session', () => sendEvent(event, options))
       }
     } finally {
       eventRequests.current.delete(controller)
@@ -290,7 +291,7 @@ export function SessionPage({
           setIsSpeaking(false)
           setIsPaused(false)
         }
-        handleSpeechError(error)
+        handleSpeechError(error, () => setSpeechRetryKey((key) => key + 1))
       })
   }, [
     environment.id,
@@ -302,6 +303,7 @@ export function SessionPage({
     teacherResponse.speech_slides,
     teacherResponse.speech_rate,
     teacherResponse.avatar_state,
+    speechRetryKey,
     handleSpeechError,
   ])
 
@@ -428,7 +430,7 @@ export function SessionPage({
   }
 
   function raiseHand() {
-    if (isBusy) {
+    if (isBusy || !teacherResponse.can_raise_hand) {
       return
     }
 
@@ -478,7 +480,7 @@ export function SessionPage({
         controller.signal,
       )
       const transcript = response?.text?.trim()
-      if (!transcript) {
+      if (!transcript || /return only the cleaned transcript/i.test(transcript)) {
         throw new Error('We could not hear a response. Please try recording again or type it instead.')
       }
 

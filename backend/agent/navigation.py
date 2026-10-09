@@ -150,7 +150,7 @@ def after_continue(state: TeacherState) -> str:
     if state["mode"] == Mode.EXPLAINING:
         return "ask_question"
     if state["mode"] == Mode.FEEDBACK and topic_finished(state):
-        return "next_topic"
+        return "topic_exit_question"
     return "explain"
 
 

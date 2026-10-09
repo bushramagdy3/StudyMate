@@ -101,6 +101,7 @@ class TeacherState(TypedDict):
     mode: Mode
     pending_question: PendingQuestion | None
     attempts: int  # wrong answers so far to pending_question
+    topic_exit_pending: bool  # final chance to ask about the current topic
     student_input: str | None  # latest answer or question the student typed
     event: dict | None  # the student event being handled right now (Step 11)
 
@@ -133,6 +134,7 @@ def initial_state(session_id: str, request: StartSessionRequest) -> TeacherState
         "mode": Mode.EXPLAINING,
         "pending_question": None,
         "attempts": 0,
+        "topic_exit_pending": False,
         "student_input": None,
         "event": None,
         "topic_progress": {},
@@ -191,10 +193,11 @@ def to_response(state: TeacherState) -> TeacherResponse:
         )
     )
 
+    # Explanations can change slides sentence by sentence. A response to a
+    # question may also deliberately reopen one earlier slide in the same topic.
     speech_slides = (
         state["speech_slides"]
-        if state["mode"] == Mode.EXPLAINING
-        and len(state["speech_slides"]) == len(state["speech"])
+        if len(state["speech_slides"]) == len(state["speech"])
         else []
     )
 

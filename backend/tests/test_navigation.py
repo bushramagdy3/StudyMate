@@ -186,8 +186,8 @@ def test_continue_after_mid_topic_feedback_explains_the_next_part():
     assert after_continue(state) == "explain"
 
 
-def test_continue_after_the_topics_last_feedback_marks_it_done():
-    assert after_continue(make_state(mode=Mode.FEEDBACK, segment_index=4)) == "next_topic"
+def test_continue_after_the_topics_last_feedback_opens_final_questions():
+    assert after_continue(make_state(mode=Mode.FEEDBACK, segment_index=4)) == "topic_exit_question"
 
 
 def test_continue_after_answering_a_raised_hand_returns_to_the_explanation():
