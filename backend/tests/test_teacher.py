@@ -112,7 +112,7 @@ def test_start_returns_intro_before_any_topic(teacher):
     assert response.current_topic is None
     assert response.current_slide == 1
     assert len(response.speech) == 1
-    assert "HTTP Performance" in response.speech[0]
+    assert "Pipelining" in response.speech[0]
     assert "Choose a topic" in response.speech[0]
     assert response.avatar_state is AvatarState.SPEAKING
     assert response.awaiting is Awaiting.CONTINUE

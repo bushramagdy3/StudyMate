@@ -91,25 +91,11 @@ Rules:
   It is read silently in the student's revision popup, so make it easy to scan."""
 
 
-def lecture_title(lecture: list[LectureChunk]) -> str:
-    if not lecture:
-        return "today's lecture"
-
-    first_slide = lecture[0].text.strip()
-    for line in first_slide.splitlines():
-        clean = line.strip(" -:\t")
-        if 4 <= len(clean) <= 90:
-            return clean
-
-    return "today's lecture"
-
-
 def intro_speech(
     lecture: list[LectureChunk],
     outline: list[OutlineTopic],
     environment,
 ) -> str:
-    title = lecture_title(lecture)
     topic_names = [topic["title"] for topic in outline[:3]]
     role = get_personality(environment).role
     tag = {
@@ -119,14 +105,19 @@ def intro_speech(
     }[role]
 
     if topic_names:
+        first_topic = outline[0]
+        first_focus = first_topic["summary"] or ", ".join(first_topic["key_points"][:2])
+        topics = ", ".join(topic_names)
+        first_sentence = f"We will explore {topics}."
+        if first_focus:
+            first_sentence += f" We will begin with {first_topic['title']}: {first_focus.rstrip('.')}."
         return (
-            f"{tag} Welcome. Before we start, this lecture is about {title}. "
-            f"I planned it into topics like {', '.join(topic_names)}. "
+            f"{tag} Welcome. {first_sentence} "
             "Choose a topic from the outline when you are ready, and I will teach it step by step."
         )
 
     return (
-        f"{tag} Welcome. Before we start, this lecture is about {title}. "
+        f"{tag} Welcome. I will guide you through the material on the slides. "
         "Choose a topic from the outline when you are ready, and I will teach it step by step."
     )
 

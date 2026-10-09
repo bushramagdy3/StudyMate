@@ -9,6 +9,7 @@ from agent.contract import Environment, LectureChunk, StartSessionRequest
 from agent.llm import LLM
 from agent.planning import (
     fallback_outline,
+    intro_speech,
     make_plan_node,
     plan_lecture,
     slides_text,
@@ -135,5 +136,25 @@ def test_plan_node_sets_up_intro_and_waits_for_topic_choice():
     assert update["segment_index"] == 0
     assert update["mode"] is Mode.INTRO
     assert update["speech"]
-    assert "Web Protocols" in update["speech"][0]
+    assert "HTTP/1.1 Pipelining" in update["speech"][0]
     assert "Choose a topic" in update["speech"][0]
+
+
+def test_intro_uses_the_planned_content_when_there_is_no_title_slide():
+    titleless_lecture = [
+        LectureChunk(slide=1, text="A 2-inch image on a 200 DPI screen uses 400 pixels."),
+    ]
+    outline = [
+        {
+            "title": "Pixels and DPI",
+            "summary": "How physical image size and display density determine pixel dimensions.",
+            "key_points": ["pixels per inch"],
+            "source_slides": [1],
+        }
+    ]
+
+    intro = intro_speech(titleless_lecture, outline, Environment.STUDY_ROOM)
+
+    assert "today's lecture" not in intro.lower()
+    assert "Pixels and DPI" in intro
+    assert "display density" in intro
