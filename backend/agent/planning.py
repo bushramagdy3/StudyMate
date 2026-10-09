@@ -34,6 +34,14 @@ class PlannedTopic(BaseModel):
 
 
 class LecturePlan(BaseModel):
+    title: str = Field(
+        default="",
+        description="A short, content-grounded title for the whole lecture, 2-7 words",
+    )
+    overview: str = Field(
+        default="",
+        description="One brief student-facing sentence describing the whole lecture",
+    )
     topics: list[PlannedTopic] = Field(min_length=1)
     lecture_summary: list[LectureSummarySection] = Field(
         default_factory=list,
@@ -86,17 +94,21 @@ Rules:
 - Skip slides with no teaching content, such as the title, agenda, "questions?", "thank you" or reference slides.
 - For each topic, list the slide numbers it is taught from in source_slides.
 - Key points must come from the slides. Do not add information that isn't in them.
+- Also provide title and overview for the opening. Title is a short name for the WHOLE
+  lecture. Overview is one plain-language sentence explaining what the lecture covers.
+  Describe the material directly; never write learning objectives or phrases such as
+  "the student should understand", "students will learn", or "today's lecture".
 - Also write lecture_summary as 2 to 4 short revision sections. Each section needs a
   2-5 word heading and 1 to 3 concise bullet points. Cover the key concepts in order.
   It is read silently in the student's revision popup, so make it easy to scan."""
 
 
 def intro_speech(
-    lecture: list[LectureChunk],
     outline: list[OutlineTopic],
     environment,
+    title: str = "",
+    overview: str = "",
 ) -> str:
-    topic_names = [topic["title"] for topic in outline[:3]]
     role = get_personality(environment).role
     tag = {
         "professor": "[reassuring]",
@@ -104,22 +116,41 @@ def intro_speech(
         "study friend": "[excited]",
     }[role]
 
-    if topic_names:
-        first_topic = outline[0]
-        first_focus = first_topic["summary"] or ", ".join(first_topic["key_points"][:2])
-        topics = ", ".join(topic_names)
-        first_sentence = f"We will explore {topics}."
-        if first_focus:
-            first_sentence += f" We will begin with {first_topic['title']}: {first_focus.rstrip('.')}."
-        return (
-            f"{tag} Welcome. {first_sentence} "
-            "Choose a topic from the outline when you are ready, and I will teach it step by step."
+    fallback_title, fallback_overview = fallback_opening(outline)
+    clean_title = title.strip() or fallback_title
+    clean_overview = overview.strip()
+    if any(
+        phrase in clean_overview.lower()
+        for phrase in (
+            "student should understand",
+            "student will learn",
+            "students will learn",
+            "the student will",
+            "learning objective",
         )
+    ):
+        clean_overview = ""
+    clean_overview = clean_overview or fallback_overview
 
     return (
-        f"{tag} Welcome. I will guide you through the material on the slides. "
+        f"{tag} Welcome. This lecture is about {clean_title.rstrip('.')}. "
+        f"{clean_overview.rstrip('.')}. "
         "Choose a topic from the outline when you are ready, and I will teach it step by step."
     )
+
+
+def fallback_opening(outline: list[OutlineTopic]) -> tuple[str, str]:
+    """Create a clean opening when the planner cannot provide one."""
+    topic_names = [topic["title"].strip() for topic in outline[:3] if topic["title"].strip()]
+    if not topic_names:
+        return "Lecture overview", "A guided introduction to the material in these slides"
+
+    title = topic_names[0]
+    if len(topic_names) == 1:
+        overview = f"A focused introduction to {title}"
+    else:
+        overview = f"A guided look at {', '.join(topic_names)}"
+    return title, overview
 
 
 def fallback_lecture_summary(outline: list[OutlineTopic]) -> list[dict]:
@@ -139,7 +170,7 @@ def fallback_lecture_summary(outline: list[OutlineTopic]) -> list[dict]:
 def plan_lecture_with_summary(
     llm: LLM,
     lecture: list[LectureChunk],
-) -> tuple[list[OutlineTopic], list[dict]]:
+) -> tuple[list[OutlineTopic], list[dict], str, str]:
     """Create the outline and a revision-ready summary in one planning request."""
     try:
         planning_input = lecture
@@ -153,16 +184,21 @@ def plan_lecture_with_summary(
         outline = clean_outline(plan, lecture)
         if outline:
             summary = [section.model_dump() for section in plan.lecture_summary]
-            return outline, summary or fallback_lecture_summary(outline)
+            return (
+                outline,
+                summary or fallback_lecture_summary(outline),
+                plan.title,
+                plan.overview,
+            )
     except LLMError:
         pass
     outline = fallback_outline(lecture)
-    return outline, fallback_lecture_summary(outline)
+    return outline, fallback_lecture_summary(outline), "", ""
 
 
 def plan_lecture(llm: LLM, lecture: list[LectureChunk]) -> list[OutlineTopic]:
     """Create the outline. Kept as a small compatibility wrapper for callers/tests."""
-    outline, _summary = plan_lecture_with_summary(llm, lecture)
+    outline, _summary, _title, _overview = plan_lecture_with_summary(llm, lecture)
     return outline
 
 
@@ -264,8 +300,8 @@ def make_plan_node(llm: LLM):
     """The 'plan' node: runs once at the start of a session."""
 
     def plan(state: TeacherState) -> dict:
-        outline, lecture_summary = plan_lecture_with_summary(llm, state["lecture"])
-        intro = intro_speech(state["lecture"], outline, state["environment"])
+        outline, lecture_summary, title, overview = plan_lecture_with_summary(llm, state["lecture"])
+        intro = intro_speech(outline, state["environment"], title, overview)
         return {
             "outline": outline,
             "lecture_summary": lecture_summary,

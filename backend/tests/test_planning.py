@@ -140,10 +140,7 @@ def test_plan_node_sets_up_intro_and_waits_for_topic_choice():
     assert "Choose a topic" in update["speech"][0]
 
 
-def test_intro_uses_the_planned_content_when_there_is_no_title_slide():
-    titleless_lecture = [
-        LectureChunk(slide=1, text="A 2-inch image on a 200 DPI screen uses 400 pixels."),
-    ]
+def test_intro_uses_a_title_and_brief_description_when_there_is_no_title_slide():
     outline = [
         {
             "title": "Pixels and DPI",
@@ -153,8 +150,35 @@ def test_intro_uses_the_planned_content_when_there_is_no_title_slide():
         }
     ]
 
-    intro = intro_speech(titleless_lecture, outline, Environment.STUDY_ROOM)
+    intro = intro_speech(
+        outline,
+        Environment.STUDY_ROOM,
+        title="Pixels on Screens",
+        overview="How display density and physical size determine an image's pixel dimensions.",
+    )
 
     assert "today's lecture" not in intro.lower()
-    assert "Pixels and DPI" in intro
+    assert "this lecture is about pixels on screens" in intro.lower()
+    assert "Pixels on Screens" in intro
     assert "display density" in intro
+
+
+def test_intro_rejects_learning_objective_wording_from_the_planner():
+    outline = [
+        {
+            "title": "The Photo's Big Journey",
+            "summary": "The student should understand how a photo travels across the internet.",
+            "key_points": ["sender to receiver"],
+            "source_slides": [1],
+        }
+    ]
+
+    intro = intro_speech(
+        outline,
+        Environment.LECTURE_HALL,
+        title="The Photo's Big Journey",
+        overview="The student should understand the central question of how a photo travels online.",
+    )
+
+    assert "student should understand" not in intro.lower()
+    assert "The Photo's Big Journey" in intro
