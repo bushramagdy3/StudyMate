@@ -56,9 +56,9 @@ Students can also record an answer or question. **Groq Whisper** transcribes it 
 
 ### Agent Workflow
 
-<!-- Replace this placeholder with the final workflow image, for example:
-     ![StudyMate agent workflow](docs/agent-workflow.png)
-     Add the image file to the repository and update the path accordingly. -->
+
+![StudyMate Agent Workflow](screenshots/StudyMate_Agent_Workflow.png)
+
 
 *Detailed agent workflow diagram coming soon.*
 
