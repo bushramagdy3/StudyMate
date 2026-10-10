@@ -53,8 +53,6 @@ Students can also record an answer or question. **Groq Whisper** transcribes it 
 ![StudyMate Agent Workflow](screenshots/StudyMate_Agent_Workflow.png)
 
 
-*Detailed agent workflow diagram coming soon.*
-
 **The AI is more than a wrapper:** Featherless AI processes visual slides and generates teaching content; Pydantic checks structured outputs; and LangGraph maintains the state of each lesson—topic, slide, spoken segment, questions, progress, and weak areas—so student interruptions don't derail the experience.
 
 **Tech stack:** React, JavaScript, HTML, CSS, Vite, PDF.js · Python, FastAPI, LangGraph, Pydantic, PyMuPDF, HTTPX · Featherless AI · Fish Audio · Groq Whisper.
