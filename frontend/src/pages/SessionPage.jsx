@@ -390,6 +390,11 @@ export function SessionPage({
   }
 
   async function sendQuizAnswers(answers) {
+    const attempt = quiz?.attempt
+    if (!attempt) {
+      return
+    }
+
     quizRequest.current?.abort()
     const controller = new AbortController()
     quizRequest.current = controller
@@ -397,22 +402,27 @@ export function SessionPage({
     setQuizStatus('submitting')
 
     try {
-      const result = await submitQuiz(teacherResponse.session_id, answers, controller.signal)
+      const result = await submitQuiz(teacherResponse.session_id, attempt, answers, controller.signal)
       if (quizRequest.current === controller) {
         setQuizResult(result)
         setQuizStatus('results')
       }
     } catch (error) {
       if (error.name !== 'AbortError' && quizRequest.current === controller) {
-        const isAnswerValidationError = error.status === 409 && /answer|expected/i.test(error.message)
+        const isStaleAttemptError = error.status === 409 && /no longer active/i.test(error.message)
+        const isAnswerValidationError = error.status === 409
+          && /expected \d+ answers|answer \d+ must/i.test(error.message)
         setQuizError(error.message)
-        setQuizErrorAction(isAnswerValidationError ? 'correct' : 'retry')
+        setQuizErrorAction(isStaleAttemptError ? 'reload' : isAnswerValidationError ? 'correct' : 'retry')
         if (isAnswerValidationError) {
           // The attempt remains intact; returning to it lets the student correct the input.
           failedQuizAction.current = () => {
             setQuizError('')
             setQuizStatus('taking')
           }
+        } else if (isStaleAttemptError) {
+          // A late response cannot safely be marked against a newer question set.
+          failedQuizAction.current = () => openQuiz('restart')
         }
         setQuizStatus('error')
       }
@@ -621,7 +631,13 @@ export function SessionPage({
         result={quizResult}
         status={quizStatus}
         progress={quizProgress}
-        retryLabel={quizErrorAction === 'correct' ? 'Return to quiz' : 'Try again'}
+        retryLabel={
+          quizErrorAction === 'correct'
+            ? 'Return to quiz'
+            : quizErrorAction === 'reload'
+              ? 'Reload quiz'
+              : 'Try again'
+        }
         onClose={closeQuiz}
         onNewQuiz={() => openQuiz('new')}
         onRetake={() => openQuiz('restart')}

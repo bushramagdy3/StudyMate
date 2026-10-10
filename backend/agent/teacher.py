@@ -259,17 +259,23 @@ class Teacher:
         state = self._state(session_id)
         if not all_topics_completed(state):
             raise EventNotAllowed("The quiz unlocks once every topic is completed")
+        # Keep generation and replacement together. Otherwise overlapping retry / retake
+        # requests can show one set of questions while replacing it on the server with another.
         with self.quiz_lock:
             previous = self.quizzes.get(session_id)
-        if mode == "restart" and previous is not None:
-            record = restart_quiz(previous)
-        else:
-            record = new_quiz(self.llm, state, previous, self.rng)  # LLM call, outside the lock
-        with self.quiz_lock:
+            if mode == "restart" and previous is not None:
+                record = restart_quiz(previous)
+            else:
+                record = new_quiz(self.llm, state, previous, self.rng)
             self.quizzes[session_id] = record
         return to_quiz(session_id, record, state["outline"])
 
-    def submit_quiz(self, session_id: str, answers: list[int | str | None]) -> QuizResult:
+    def submit_quiz(
+        self,
+        session_id: str,
+        answers: list[int | str | None],
+        attempt: int | None = None,
+    ) -> QuizResult:
         """Mark the quiz: score, the right answers, and topics to improve on.
 
         Typed answers are graded by the LLM (one call). Raises SessionNotFound,
@@ -278,12 +284,18 @@ class Teacher:
         state = self._state(session_id)
         with self.quiz_lock:
             record = self.quizzes.get(session_id)
-        if record is None:
-            raise EventNotAllowed("There's no quiz to submit")
-        problem = answers_problem(record, answers)
-        if problem:
-            raise EventNotAllowed(problem)
-        return mark_quiz(self.llm, session_id, record, answers, state["outline"])  # LLM call, outside the lock
+            if record is None:
+                raise EventNotAllowed("There's no quiz to submit")
+            if attempt is not None and attempt != record.attempt:
+                raise EventNotAllowed(
+                    "That quiz attempt is no longer active. Reopen the quiz and answer the displayed questions."
+                )
+            problem = answers_problem(record, answers)
+            if problem:
+                raise EventNotAllowed(problem)
+            # Marking updates the record's missed topics, so do not allow a new/restarted
+            # attempt to replace it while the typed answers are being graded.
+            return mark_quiz(self.llm, session_id, record, answers, state["outline"])
 
     def get_session(self, session_id: str) -> TeacherResponse:
         """The current turn again, without changing anything (e.g. after a page reload)."""

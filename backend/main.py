@@ -663,7 +663,7 @@ def start_quiz(session_id: str, request: QuizRequest):
 @app.post("/api/sessions/{session_id}/quiz/answers", response_model=QuizResult)
 def submit_quiz(session_id: str, submission: QuizAnswers):
     try:
-        return get_teacher().submit_quiz(session_id, submission.answers)
+        return get_teacher().submit_quiz(session_id, submission.answers, submission.attempt)
     except SessionNotFound:
         raise session_not_found(session_id)
     except EventNotAllowed as error:

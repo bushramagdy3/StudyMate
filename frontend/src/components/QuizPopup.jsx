@@ -35,9 +35,13 @@ function QuizQuestions({ quiz, progress, isSubmitting, onProgressChange, onSubmi
   const chosen = answers[current]
 
   function setAnswer(value) {
-    onProgressChange({
-      current,
-      answers: answers.map((answer, index) => (index === current ? value : answer)),
+    onProgressChange((previous) => {
+      const latestAnswers = previous?.answers ?? quiz.questions.map(() => null)
+      const latestCurrent = previous?.current ?? current
+      return {
+        current: latestCurrent,
+        answers: latestAnswers.map((answer, index) => (index === latestCurrent ? value : answer)),
+      }
     })
   }
 
@@ -116,7 +120,10 @@ function QuizQuestions({ quiz, progress, isSubmitting, onProgressChange, onSubmi
         {current > 0 && (
           <PopupButton
             disabled={isSubmitting}
-            onClick={() => onProgressChange({ current: current - 1, answers })}
+            onClick={() => onProgressChange((previous) => ({
+              current: Math.max(0, (previous?.current ?? current) - 1),
+              answers: previous?.answers ?? answers,
+            }))}
           >
             Back
           </PopupButton>
@@ -131,7 +138,10 @@ function QuizQuestions({ quiz, progress, isSubmitting, onProgressChange, onSubmi
         ) : (
           <PopupButton
             disabled={!isAnswered(chosen)}
-            onClick={() => onProgressChange({ current: current + 1, answers })}
+            onClick={() => onProgressChange((previous) => ({
+              current: Math.min(quiz.questions.length - 1, (previous?.current ?? current) + 1),
+              answers: previous?.answers ?? answers,
+            }))}
           >
             Next
           </PopupButton>

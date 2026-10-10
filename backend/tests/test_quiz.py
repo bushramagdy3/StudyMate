@@ -294,6 +294,18 @@ def test_restart_keeps_the_same_questions():
     assert again.missed_topics is None  # old marks forgotten
 
 
+def test_submission_rejects_answers_for_a_replaced_attempt(teacher):
+    session = finish_lecture(teacher)
+    first = teacher.start_quiz(session, "new")
+    active = teacher.start_quiz(session, "restart")
+
+    with pytest.raises(EventNotAllowed, match="no longer active"):
+        teacher.submit_quiz(session, [None] * len(first.questions), attempt=first.attempt)
+
+    result = teacher.submit_quiz(session, [None] * len(active.questions), attempt=active.attempt)
+    assert result.total == len(active.questions)
+
+
 # --- unlocking ----------------------------------------------------------------
 
 

@@ -284,8 +284,10 @@ class Quiz(_Model):
 
 class QuizAnswers(_Model):
     """One answer per question, in order: the option index for "mcq", the typed
-    text for "text", or null if left blank."""
+    text for "text", or null if left blank. `attempt` binds the answers to the
+    exact question set the student received."""
 
+    attempt: StrictInt = Field(ge=1)
     # Keep a typed value such as "1" as text. It must not be coerced into an
     # option index before the quiz checker sees the question kind.
     answers: list[StrictInt | StrictStr | None]

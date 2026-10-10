@@ -234,10 +234,10 @@ export function startQuiz(sessionId, mode, signal) {
 
 // answers: for each question, the chosen option index (multiple choice) or the
 // typed text (typed answer), or null if left blank.
-export function submitQuiz(sessionId, answers, signal) {
+export function submitQuiz(sessionId, attempt, answers, signal) {
   return postJson(
     `/api/sessions/${sessionId}/quiz/answers`,
-    { answers },
+    { attempt, answers },
     signal,
     QUIZ_SUBMIT_TIMEOUT_MS,
     'Marking the quiz took too long. Please try again.',
