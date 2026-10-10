@@ -141,58 +141,6 @@ The frontend connects to the backend at `http://127.0.0.1:8000` by default.
 
 The project requires working Featherless AI and Fish Audio keys. Fish Audio's current `s2.1-pro-free` model is advertised as free **through November 30, 2026**; after that, access or the integration may need updating. See [Fish Audio's announcement](https://beta.fish.audio/blog/s2-1-pro-free-api/). Voice answers additionally use Groq Whisper when `GROQ_STT_API_KEY` is configured; the rest of the study session works normally without it.
 
-### Inspiration
-
-**What makes a lecture effective isn't just what the professor explains. It's how they teach.**
-
-A professor moves between slides, connects concepts, asks questions, revisits earlier material when students are confused, and somehow keeps the entire lecture moving.
-
-But lecture slides alone can't recreate that experience.
-
-As a student, I experienced the frustration of missing lectures or trying to study independently. YouTube videos rarely match your actual course material, while AI chatbots and chat-with-PDF platforms leave you responsible for directing the lesson: asking for explanations, requesting questions, reminding the AI where you stopped, and piecing everything together yourself.
-
-I kept wondering: **What if AI could recreate the structure, continuity, and interaction of a real lecture, not just explain its slides?**
-
-That's why we built StudyMate.
-
-### What it does
-
-**StudyMate transforms static lecture PDFs into stateful, interactive teaching experiences.**
-
-Rather than simply answering prompts, its AI agent actively leads the lesson—organizing concepts, explaining them aloud, and synchronizing the relevant PDF slides with speech, subtitles, and an expressive virtual teacher.
-
-The agent follows a structured **teach → question → evaluate → feedback** workflow. Understanding checks aren't optional suggestions: students must engage with the questions, receiving hints and a limited number of attempts before the tutor reveals and explains the answer. Learning becomes active rather than passive.
-
-Just like in a real classroom, students can **raise their hand mid-explanation**, ask about something they missed, even from an earlier slide, and receive a contextual answer before the lecture resumes where it stopped.
-
-Behind the scenes, LangGraph maintains the lesson's state: the current topic, slide, speech position, conversation history, completed topics, and learning difficulties. Students can also replay topics with entirely new explanations.
-
-After the lecture, an **adaptive quiz** prioritizes weaker concepts, selects suitable question formats, and supports new attempts focused on previous mistakes.
-
-With three distinct learning environments, **Lecture Hall, Private Tutor, and Study Café**, StudyMate makes the experience feel less like using a chatbot and more like attending a lecture built around you.
-
-**The student doesn't have to guide the AI through the lecture. The AI guides the student toward understanding.**
-
-### How we built it
-
-**PyMuPDF** extracts slide content and detects pages that need visual interpretation; **Featherless AI** processes diagrams and visual concepts, then helps generate lesson plans, explanations, and understanding checks. **Pydantic** validates structured AI responses.
-
-At the center is **LangGraph**: an interruptible, stateful teaching agent that coordinates planning, explaining, questioning, grading, feedback, topic navigation, and hand-raise interruptions while tracking what each student struggles with during the session.
-
-**FastAPI** powers the backend, **React + Vite + PDF.js** provide the interactive classroom and synchronized slides, **Fish Audio** produces expressive speech, and **Groq Whisper** enables optional voice input.
-
-### Challenges we ran into
-
-The real challenge wasn't making AI explain a slidem it was making it behave like **one continuous teacher**. Questions, interruptions, slide changes, speech playback, and answer evaluation all needed to stay synchronized. We addressed that with explicit LangGraph states, checkpointed session context, segment-aware playback, and event-driven transitions. The quiz also required translating student mistakes into meaningful targeted practice rather than random revision questions.
-
-### Accomplishments that we're proud of
-
-We built a complete **teach → question → feedback → practice** experience around students' *actual course material*. StudyMate goes beyond a PDF summarizer or chat interface: it turns static slides into an interactive lesson with three learning environments, natural interruptions, voice input, and adaptive assessment.
-
-### What we learned
-
-A useful educational agent needs more than good answers. **It needs pedagogical structure, continuity, and feedback**, and an interface that makes students feel guided rather than responsible for prompting every next step.
-
 ### What's Next
 
 **A great professor doesn't forget what happened in the previous lecture. Why should an AI tutor?**
