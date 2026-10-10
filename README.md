@@ -110,23 +110,32 @@ Start the backend (from `backend/`):
 uvicorn main:app --reload
 ```
 
+
 ### 3. Frontend
 
-If you don't have Node.js Installed, then in the terminal, install Node.js:
+**Requirements:** Node.js and npm.
+
+If Node.js is not installed, download it from [nodejs.org](https://nodejs.org/).
+
+On Windows, you can alternatively install it using:
+
 ```bash
 winget install OpenJS.NodeJS.LTS
 ```
 
-Then, close and reopen VS Code and in a **new terminal**, from the project root:
+After installation, restart your terminal.
+
+Open a **new terminal in the StudyMate project root**, then run:
 
 ```bash
-cd StudyMate
 cd frontend
 npm install
 npm run dev
 ```
 
-Open the local URL Vite prints (usually `http://localhost:5173`). The frontend connects to the backend at `http://127.0.0.1:8000` by default.
+Open the local URL Vite prints (usually `http://localhost:5173`).
+
+The frontend connects to the backend at `http://127.0.0.1:8000` by default.
 
 ### API Availability
 
