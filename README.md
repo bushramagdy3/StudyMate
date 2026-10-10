@@ -41,13 +41,6 @@ Lecture slides often contain diagrams, formulas, and brief bullet points that ma
 
 *Click any screenshot to view it at full size.*
 
-## Demo Video
-
-<!-- Replace this placeholder with the public demo link when it is ready.
-     Example: [Watch the StudyMate demo](https://youtu.be/YOUR_VIDEO_ID) -->
-
-*Demo video coming soon.*
-
 ## How It Works
 
 StudyMate uses **PyMuPDF** and **Featherless AI** to interpret slide text and visuals, then generates a slide-grounded lesson plan. **LangGraph** orchestrates the session: teaching, questioning, evaluating answers, handling interruptions, and tracking weak areas. **React**, **PDF.js**, **Fish Audio**, and **Groq Whisper** bring that workflow into an interactive classroom.
