@@ -37,8 +37,13 @@ const sourceKinds = {
   },
 }
 
+function sourceKind(file) {
+  const match = Object.entries(sourceKinds).find(([, kind]) => kind.matcher(file))
+  return match ? { key: match[0], ...match[1] } : null
+}
+
 function sourceLabel(file) {
-  return Object.values(sourceKinds).find((kind) => kind.matcher(file))?.label || 'Media source'
+  return sourceKind(file)?.label || 'Media source'
 }
 
 function fileKey(file) {
@@ -143,20 +148,11 @@ export function UploadPdfPage({ mediaFiles, onMediaFilesChange, onBack, onContin
           {mediaFiles.length > 0 && (
             <div className="selected-file-list" aria-label="Uploaded media">
               {mediaFiles.map((file) => (
-                <div
-                  className="selected-file"
+                <SelectedFile
+                  file={file}
                   key={fileKey(file)}
-                  style={{ backgroundImage: `url(${fileNamePlaceholder})` }}
-                >
-                  <img className="selected-file-icon" src={fileIcon} alt="" />
-                  <span className="selected-file-copy">
-                    <span className="selected-file-name">{file.name}</span>
-                    <small>{sourceLabel(file)}</small>
-                  </span>
-                  <button type="button" onClick={() => removeFile(file)} aria-label={`Remove ${file.name}`}>
-                    <img src={removeIcon} alt="" />
-                  </button>
-                </div>
+                  onRemove={() => removeFile(file)}
+                />
               ))}
             </div>
           )}
@@ -199,5 +195,29 @@ export function UploadPdfPage({ mediaFiles, onMediaFilesChange, onBack, onContin
         </div>
       )}
     </Screen>
+  )
+}
+
+function SelectedFile({ file, onRemove }) {
+  const kind = sourceKind(file)
+
+  return (
+    <div
+      className="selected-file"
+      style={{ backgroundImage: `url(${fileNamePlaceholder})` }}
+    >
+      <img
+        className={`selected-file-icon${kind ? ` selected-file-icon--${kind.key}` : ''}`}
+        src={kind?.icon || fileIcon}
+        alt=""
+      />
+      <span className="selected-file-copy">
+        <span className="selected-file-name">{file.name}</span>
+        <small>{sourceLabel(file)}</small>
+      </span>
+      <button type="button" onClick={onRemove} aria-label={`Remove ${file.name}`}>
+        <img src={removeIcon} alt="" />
+      </button>
+    </div>
   )
 }

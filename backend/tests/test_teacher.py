@@ -54,7 +54,11 @@ def fake_featherless():
         elif "Write the explanation" in full:
             calls["explain"] += 1
             n = calls["explain"]
-            reply = {"segments": [f"e{n}-s0", f"e{n}-s1", f"e{n}-s2"], "question_after": [3]}
+            reply = {
+                "segments": [f"e{n}-s0", f"e{n}-s1", f"e{n}-s2"],
+                "segment_slides": [1, 1, 1],
+                "question_after": [3],
+            }
         elif "Ask the student ONE question" in full:
             reply = {"question": "Why is it faster?", "expected_answer": "no waiting", "explanation": "Overlap."}
         elif "The student answered" in full:

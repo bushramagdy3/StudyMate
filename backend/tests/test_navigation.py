@@ -53,7 +53,10 @@ def fake_llm(content=None, status=200):
         sent.append(json.loads(request.content))
         if status != 200:
             return httpx.Response(status)
-        text = content if isinstance(content, str) else json.dumps(content)
+        payload = content
+        if isinstance(payload, dict) and "segments" in payload and "segment_slides" not in payload:
+            payload = payload | {"segment_slides": [1] * len(payload["segments"])}
+        text = payload if isinstance(payload, str) else json.dumps(payload)
         return httpx.Response(200, json={"choices": [{"message": {"content": text}}]})
 
     return LLM("key", "model", transport=httpx.MockTransport(handler)), sent

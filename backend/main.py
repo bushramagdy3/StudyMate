@@ -4,9 +4,11 @@ import os
 import shutil
 import subprocess
 import tempfile
+import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
+from xml.etree import ElementTree
 
 import httpx
 from agent.contract import (
@@ -75,6 +77,10 @@ class TTR(BaseModel):
 
 
 teacher: Teacher | None = None
+# PDFs are held only for the lifetime of an active session. Uploaded PDFs and
+# server-converted PowerPoints both use this cache so the existing PDF viewer
+# can follow an explanation across source files.
+session_viewer_sources: dict[str, dict[int, bytes]] = {}
 
 
 def get_teacher() -> Teacher:
@@ -413,48 +419,146 @@ def libreoffice_executable() -> str | None:
     return shutil.which("soffice") or shutil.which("libreoffice")
 
 
+def powerpoint_executable() -> str | None:
+    """Find a local Windows PowerPoint installation for presentation export."""
+    configured = os.getenv("POWERPOINT_PATH")
+    if configured and Path(configured).is_file():
+        return configured
+    candidates = [
+        Path(os.environ.get("ProgramFiles", r"C:\Program Files"))
+        / "Microsoft Office/root/Office16/POWERPNT.EXE",
+        Path(os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)"))
+        / "Microsoft Office/root/Office16/POWERPNT.EXE",
+    ]
+    return next((str(candidate) for candidate in candidates if candidate.is_file()), None)
+
+
 def convert_presentation_bytes(presentation: bytes, filename: str) -> bytes:
     executable = libreoffice_executable()
-    if not executable:
-        raise HTTPException(
-            status_code=503,
-            detail=(
-                "PPT conversion requires LibreOffice. Install LibreOffice or set "
-                "LIBREOFFICE_PATH to its soffice executable."
-            ),
-        )
 
     with tempfile.TemporaryDirectory(prefix="studymate-ppt-") as directory:
         source = Path(directory, Path(filename).name)
+        output = source.with_suffix(".pdf")
         source.write_bytes(presentation)
-        try:
-            result = subprocess.run(
-                [
-                    executable,
-                    "--headless",
-                    "--convert-to",
-                    "pdf",
-                    "--outdir",
-                    directory,
-                    str(source),
-                ],
-                capture_output=True,
-                check=False,
-                timeout=PRESENTATION_TIMEOUT_SECONDS,
+        if executable:
+            try:
+                result = subprocess.run(
+                    [
+                        executable,
+                        "--headless",
+                        "--convert-to",
+                        "pdf",
+                        "--outdir",
+                        directory,
+                        str(source),
+                    ],
+                    capture_output=True,
+                    check=False,
+                    timeout=PRESENTATION_TIMEOUT_SECONDS,
+                )
+            except subprocess.TimeoutExpired as error:
+                raise HTTPException(
+                    status_code=504,
+                    detail="Presentation conversion took too long. Please try a smaller file.",
+                ) from error
+            if result.returncode == 0 and output.is_file():
+                return output.read_bytes()
+
+        if powerpoint_executable():
+            try:
+                return convert_with_powerpoint(source, output)
+            except HTTPException:
+                if source.suffix.lower() != ".pptx":
+                    raise
+
+        if source.suffix.lower() == ".pptx":
+            return convert_pptx_text_to_pdf(source)
+
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Could not convert this legacy .ppt file. Install LibreOffice, or open it in "
+                "PowerPoint and save it as .pptx before uploading."
+            ),
+        )
+
+
+def convert_with_powerpoint(source: Path, output: Path) -> bytes:
+    """Export a PPT/PPTX using installed PowerPoint without showing a window."""
+    source_path = str(source).replace("'", "''")
+    output_path = str(output).replace("'", "''")
+    script = f"""
+$ErrorActionPreference = 'Stop'
+$app = $null
+$presentation = $null
+try {{
+  $app = New-Object -ComObject PowerPoint.Application
+  $presentation = $app.Presentations.Open('{source_path}', $false, $false, $false)
+  $presentation.SaveAs('{output_path}', 32)
+}} finally {{
+  if ($presentation) {{ $presentation.Close() }}
+  if ($app) {{ $app.Quit() }}
+}}
+"""
+    try:
+        result = subprocess.run(
+            [
+                "powershell",
+                "-NoProfile",
+                "-NonInteractive",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-Command",
+                script,
+            ],
+            capture_output=True,
+            check=False,
+            timeout=PRESENTATION_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired as error:
+        raise HTTPException(
+            status_code=504,
+            detail="PowerPoint took too long to export this presentation. Please try a smaller file.",
+        ) from error
+    if result.returncode != 0 or not output.is_file():
+        message = result.stderr.decode("utf-8", "replace").strip()
+        raise HTTPException(
+            status_code=400,
+            detail=f"Could not export this presentation with PowerPoint.{f' {message}' if message else ''}",
+        )
+    return output.read_bytes()
+
+
+def convert_pptx_text_to_pdf(source: Path) -> bytes:
+    """Last-resort PPTX fallback that keeps each slide's text viewable."""
+    try:
+        with zipfile.ZipFile(source) as archive:
+            slide_names = sorted(
+                (name for name in archive.namelist() if name.startswith("ppt/slides/slide") and name.endswith(".xml")),
+                key=lambda name: int(Path(name).stem.removeprefix("slide")),
             )
-        except subprocess.TimeoutExpired as error:
-            raise HTTPException(
-                status_code=504,
-                detail="Presentation conversion took too long. Please try a smaller file.",
-            ) from error
-        converted = source.with_suffix(".pdf")
-        if result.returncode != 0 or not converted.is_file():
-            error = result.stderr.decode("utf-8", "replace").strip()
-            raise HTTPException(
-                status_code=400,
-                detail=f"Could not convert presentation to PDF.{f' {error}' if error else ''}",
-            )
-        return converted.read_bytes()
+            slide_text = []
+            for name in slide_names:
+                root = ElementTree.fromstring(archive.read(name))
+                lines = [node.text.strip() for node in root.iter("{http://schemas.openxmlformats.org/drawingml/2006/main}t") if node.text and node.text.strip()]
+                slide_text.append("\n".join(lines) or "This slide has no extractable text.")
+    except (OSError, ValueError, zipfile.BadZipFile, ElementTree.ParseError) as error:
+        raise HTTPException(status_code=400, detail="Could not read the PPTX file.") from error
+
+    import pymupdf
+
+    document = pymupdf.open()
+    for index, text in enumerate(slide_text, start=1):
+        page = document.new_page(width=960, height=540)
+        page.insert_textbox(
+            pymupdf.Rect(56, 50, 904, 490),
+            f"Slide {index}\n\n{text}",
+            fontsize=18,
+            fontname="helv",
+            color=(0.12, 0.08, 0.06),
+            lineheight=1.35,
+        )
+    return document.tobytes()
 
 
 async def process_presentation_upload(presentation: UploadFile) -> list[LectureChunk]:
@@ -465,12 +569,19 @@ async def process_presentation_upload(presentation: UploadFile) -> list[LectureC
         raise HTTPException(status_code=400, detail="Presentation file is empty.")
     if len(presentation_bytes) > MAX_MEDIA_BYTES:
         raise HTTPException(status_code=413, detail="Presentation is too large. Keep it under 500 MB.")
-    pdf_bytes = await asyncio.to_thread(
-        convert_presentation_bytes,
-        presentation_bytes,
-        presentation.filename or "presentation.pptx",
+    pdf_bytes = await presentation_to_pdf_bytes(
+        presentation_bytes, presentation.filename or "presentation.pptx"
     )
     return await process_pdf_bytes(pdf_bytes)
+
+
+async def presentation_to_pdf_bytes(presentation_bytes: bytes, filename: str) -> bytes:
+    """Convert a presentation once, for extraction and the session viewer."""
+    if not presentation_bytes:
+        raise HTTPException(status_code=400, detail="Presentation file is empty.")
+    if len(presentation_bytes) > MAX_MEDIA_BYTES:
+        raise HTTPException(status_code=413, detail="Presentation is too large. Keep it under 500 MB.")
+    return await asyncio.to_thread(convert_presentation_bytes, presentation_bytes, filename)
 
 
 def ffmpeg_executable() -> str:
@@ -626,6 +737,7 @@ def annotate_source_chunks(
     source_name: str,
     source_type: Literal["pdf", "ppt", "video"],
     first_slide: int,
+    source_index: int | None = None,
 ) -> list[LectureChunk]:
     """Give each source chunk a globally unique slide id while retaining its origin."""
     annotated = []
@@ -635,6 +747,7 @@ def annotate_source_chunks(
                 slide=first_slide + offset,
                 text=chunk.text,
                 source_name=source_name,
+                source_index=source_index,
                 source_type=source_type,
                 source_page=chunk.slide if source_type != "video" else None,
                 start_seconds=chunk.start_seconds,
@@ -644,21 +757,43 @@ def annotate_source_chunks(
     return annotated
 
 
-async def process_media_uploads(media: list[UploadFile]) -> list[LectureChunk]:
+async def process_media_uploads(
+    media: list[UploadFile],
+    viewer_sources: dict[int, bytes] | None = None,
+) -> list[LectureChunk]:
     if not media:
         raise HTTPException(status_code=400, detail="Upload at least one media file.")
 
     lecture = []
     next_slide = 1
-    for upload in media:
+    for source_index, upload in enumerate(media):
         kind = media_type(upload)
-        if kind == "pdf":
+        if kind == "pdf" and viewer_sources is not None:
+            if not is_pdf_upload(upload):
+                raise HTTPException(status_code=400, detail="Upload a PDF file.")
+            pdf_bytes = await upload.read()
+            chunks = await process_pdf_bytes(pdf_bytes)
+            viewer_sources[source_index] = pdf_bytes
+        elif kind == "ppt" and viewer_sources is not None:
+            presentation_bytes = await upload.read()
+            pdf_bytes = await presentation_to_pdf_bytes(
+                presentation_bytes, upload.filename or "presentation.pptx"
+            )
+            chunks = await process_pdf_bytes(pdf_bytes)
+            viewer_sources[source_index] = pdf_bytes
+        elif kind == "pdf":
             chunks = await process_pdf_upload(upload)
         elif kind == "ppt":
             chunks = await process_presentation_upload(upload)
         else:
             chunks = await process_video_upload(upload)
-        annotated = annotate_source_chunks(chunks, upload.filename or "Untitled source", kind, next_slide)
+        annotated = annotate_source_chunks(
+            chunks,
+            upload.filename or "Untitled source",
+            kind,
+            next_slide,
+            source_index,
+        )
         lecture.extend(annotated)
         next_slide += len(annotated)
 
@@ -893,8 +1028,9 @@ async def start_session(
 ):
     # Keep the old single-PDF field working for existing clients while the new
     # upload page sends one or more files under `media`.
+    viewer_sources: dict[int, bytes] = {}
     if media:
-        lecture = await process_media_uploads(media)
+        lecture = await process_media_uploads(media, viewer_sources)
     elif pdf:
         lecture = await process_pdf_upload(pdf)
     else:
@@ -907,7 +1043,10 @@ async def start_session(
     )
 
     try:
-        return get_teacher().start_session(request)
+        response = get_teacher().start_session(request)
+        if viewer_sources:
+            session_viewer_sources[response.session_id] = viewer_sources
+        return response
     except LLMError as error:
         raise HTTPException(
             status_code=502,
@@ -941,6 +1080,24 @@ def get_session(session_id: str):
         raise session_not_found(session_id)
 
 
+@app.get("/api/sessions/{session_id}/sources/{source_index}.pdf")
+def get_session_source_pdf(session_id: str, source_index: int):
+    """Serve one visual source as a PDF for the in-session page viewer."""
+    try:
+        get_teacher().get_session(session_id)
+    except SessionNotFound:
+        raise session_not_found(session_id)
+
+    source = session_viewer_sources.get(session_id, {}).get(source_index)
+    if source is None:
+        raise HTTPException(status_code=404, detail="That source has no viewable PDF pages.")
+    return Response(
+        content=source,
+        media_type="application/pdf",
+        headers={"Content-Disposition": "inline"},
+    )
+
+
 @app.post("/api/sessions/{session_id}/transcribe")
 async def transcribe_session_audio(
     session_id: str,
@@ -962,6 +1119,7 @@ def delete_session(session_id: str):
     except SessionNotFound:
         raise session_not_found(session_id)
 
+    session_viewer_sources.pop(session_id, None)
     return Response(status_code=204)
 
 

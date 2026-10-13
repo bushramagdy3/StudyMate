@@ -72,26 +72,26 @@ def test_plan_lecture_returns_clean_outline():
 
     prompt = sent[0]["messages"][1]["content"]
     assert "Slide 3:\nHead-of-line blocking" in prompt
-    assert "between 1 and 4 small topics" in prompt
+    assert "between 1 and 2 small topics" in prompt
 
 
 def test_topic_range_scales_with_slides():
-    assert topic_range(1) == (1, 3)
-    assert topic_range(10) == (4, 7)
-    assert topic_range(60) == (12, 12)
+    assert topic_range(1) == (1, 1)
+    assert topic_range(10) == (2, 3)
+    assert topic_range(60) == (7, 8)
 
 
 def test_too_many_topics_are_cut():
     many = {"topics": [{**PLAN["topics"][0], "title": f"Topic {i}"} for i in range(20)]}
     llm, _ = fake_llm(lambda body: json_reply(many))
-    assert len(plan_lecture(llm, LECTURE)) == planning.MAX_TOPICS
+    assert len(plan_lecture(llm, LECTURE)) == topic_range(len(LECTURE))[1]
 
 
 def test_llm_failure_falls_back_to_slide_groups():
     llm, _ = fake_llm(lambda body: httpx.Response(503))
     outline = plan_lecture(llm, LECTURE)
     assert outline == fallback_outline(LECTURE)
-    assert [topic["source_slides"] for topic in outline] == [[1, 2, 3], [4]]
+    assert [topic["source_slides"] for topic in outline] == [[1, 2], [3, 4]]
     assert outline[0]["title"] == "Web Protocols"
 
 
@@ -140,7 +140,7 @@ def test_plan_node_sets_up_intro_and_waits_for_topic_choice():
     assert "Choose a topic" in update["speech"][0]
 
 
-def test_intro_uses_a_title_and_brief_description_when_there_is_no_title_slide():
+def test_intro_uses_the_planner_written_brief_without_repeating_a_title():
     outline = [
         {
             "title": "Pixels and DPI",
@@ -153,17 +153,16 @@ def test_intro_uses_a_title_and_brief_description_when_there_is_no_title_slide()
     intro = intro_speech(
         outline,
         Environment.STUDY_ROOM,
-        title="Pixels on Screens",
-        overview="How display density and physical size determine an image's pixel dimensions.",
+        opening="This session connects display density and physical size to an image's pixel dimensions.",
     )
 
     assert "today's lecture" not in intro.lower()
-    assert "this lecture is about pixels on screens" in intro.lower()
-    assert "Pixels on Screens" in intro
+    assert "this lecture is about" not in intro.lower()
+    assert "Pixels on Screens" not in intro
     assert "display density" in intro
 
 
-def test_intro_rejects_learning_objective_wording_from_the_planner():
+def test_intro_keeps_the_planner_written_opening_as_one_brief_explanation():
     outline = [
         {
             "title": "The Photo's Big Journey",
@@ -176,9 +175,42 @@ def test_intro_rejects_learning_objective_wording_from_the_planner():
     intro = intro_speech(
         outline,
         Environment.LECTURE_HALL,
-        title="The Photo's Big Journey",
-        overview="The student should understand the central question of how a photo travels online.",
+        opening="We will follow how a photo travels from its sender through the network to its receiver.",
     )
 
     assert "student should understand" not in intro.lower()
-    assert "The Photo's Big Journey" in intro
+    assert "The Photo's Big Journey" not in intro
+    assert "We will follow how a photo travels" in intro
+
+
+def test_outline_replaces_slide_descriptions_with_broad_source_backed_titles():
+    plan = planning.LecturePlan.model_validate(
+        {
+            "topics": [
+                {
+                    "title": "This slide, part of a Computer Networks lecture",
+                    "summary": "An opening overview.",
+                    "key_points": [],
+                    "source_slides": [1],
+                },
+                {
+                    "title": "This slide, part of a Computer Networks lecture",
+                    "summary": "A protocol detail.",
+                    "key_points": [],
+                    "source_slides": [2],
+                },
+                {
+                    "title": "two most common protocols used to transmit data over the internet",
+                    "summary": "A comparison.",
+                    "key_points": [],
+                    "source_slides": [3],
+                },
+            ]
+        }
+    )
+
+    outline = planning.clean_outline(plan, LECTURE)
+
+    assert len(outline) <= topic_range(len(LECTURE))[1]
+    assert all("this slide" not in topic["title"].casefold() for topic in outline)
+    assert all(len(topic["source_slides"]) >= 1 for topic in outline)

@@ -16,6 +16,7 @@ from agent.contract import (
     AvatarState,
     Environment,
     LectureChunk,
+    SourceReference,
     StartSessionRequest,
     TeacherResponse,
     Topic,
@@ -200,11 +201,31 @@ def to_response(state: TeacherState) -> TeacherResponse:
         if len(state["speech_slides"]) == len(state["speech"])
         else []
     )
+    sources_by_slide = {chunk.slide: chunk for chunk in state["lecture"]}
+
+    def source_reference(slide: int | None) -> SourceReference | None:
+        if slide is None:
+            return None
+        chunk = sources_by_slide.get(slide)
+        if chunk is None:
+            return SourceReference(slide=slide)
+        return SourceReference(
+            slide=slide,
+            source_name=chunk.source_name,
+            source_index=chunk.source_index,
+            source_type=chunk.source_type,
+            source_page=chunk.source_page,
+        )
+
+    speech_sources = [
+        source for slide in speech_slides if (source := source_reference(slide)) is not None
+    ]
 
     return TeacherResponse(
         session_id=state["session_id"],
         speech=state["speech"],
         speech_slides=speech_slides,
+        speech_sources=speech_sources,
         avatar_state=avatar_state,
         awaiting=awaiting,
         phase=state["mode"].value,
@@ -215,6 +236,7 @@ def to_response(state: TeacherState) -> TeacherResponse:
         lecture_summary=state.get("lecture_summary", []),
         current_topic=state["current_topic"],
         current_slide=state["current_slide"],
+        current_source=source_reference(state["current_slide"]),
         completed_topics=state["completed_topics"],
         started_topics=started_topics,
         can_raise_hand=state["mode"] == Mode.EXPLAINING,

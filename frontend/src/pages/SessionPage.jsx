@@ -63,7 +63,7 @@ function postureAfterSpeech(awaiting) {
 export function SessionPage({
   environment,
   initialTeacherResponse,
-  pdfUrl,
+  sourceViewerUrls,
   onTeacherResponseChange,
   onError,
 }) {
@@ -95,6 +95,9 @@ export function SessionPage({
   const failedQuizAction = useRef(null)
   const [displayedSlide, setDisplayedSlide] = useState(
     initialTeacherResponse.current_slide || 1,
+  )
+  const [displayedSource, setDisplayedSource] = useState(
+    initialTeacherResponse.current_source || null,
   )
   const playingSegment = useRef(0)
   const actionToken = useRef(0)
@@ -249,8 +252,13 @@ export function SessionPage({
         if (token === actionToken.current) {
           playingSegment.current = index
           const nextSlide = teacherResponse.speech_slides?.[index]
+          const nextSource = teacherResponse.speech_sources?.[index]
+          if (nextSource) {
+            setDisplayedSource(nextSource)
+            setDisplayedSlide(nextSource.source_page || nextSource.slide)
+          }
           if (nextSlide) {
-            setDisplayedSlide(nextSlide)
+            setDisplayedSlide(nextSource?.source_page || nextSlide)
           }
           setSubtitle(text)
         }
@@ -301,6 +309,7 @@ export function SessionPage({
     teacherResponse.phase,
     teacherResponse.speech,
     teacherResponse.speech_slides,
+    teacherResponse.speech_sources,
     teacherResponse.speech_rate,
     teacherResponse.avatar_state,
     speechRetryKey,
@@ -534,9 +543,10 @@ export function SessionPage({
           data-pdf-slide-slot
         >
           <PdfSlideViewer
+            key={displayedSource?.source_index ?? 'no-viewable-source'}
             // Fill the screen's width and scroll down the page, so a tall A4 page stays readable.
             fitWidth
-            pdfUrl={pdfUrl}
+            pdfUrl={sourceViewerUrls[displayedSource?.source_index] || ''}
             slideNumber={currentSlide}
             topicTitle={currentTopic?.title}
             onError={onError}

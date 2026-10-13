@@ -42,6 +42,9 @@ class LectureChunk(_Model):
     # `slide` stays globally unique for the existing agent and slide-transition
     # flow. These fields retain where that material came from in a combined upload.
     source_name: str | None = None
+    # The upload's zero-based position. Names alone are not reliable when two
+    # files share a name, so the viewer uses this alongside source_name.
+    source_index: int | None = Field(default=None, ge=0)
     source_type: Literal["pdf", "ppt", "video"] | None = None
     source_page: int | None = Field(default=None, ge=1)
     start_seconds: float | None = Field(default=None, ge=0)
@@ -170,6 +173,16 @@ class LectureSummarySection(_Model):
     points: list[str] = Field(min_length=1, max_length=3)
 
 
+class SourceReference(_Model):
+    """The exact uploaded source and page used for one explanation segment."""
+
+    slide: int = Field(ge=1)
+    source_name: str | None = None
+    source_index: int | None = Field(default=None, ge=0)
+    source_type: Literal["pdf", "ppt", "video"] | None = None
+    source_page: int | None = Field(default=None, ge=1)
+
+
 class TeacherResponse(_Model):
     """What the agent returns after every turn."""
 
@@ -181,6 +194,10 @@ class TeacherResponse(_Model):
     # The slide to show as each speech item starts. This is only populated for
     # explanations; other teacher turns keep the current slide on screen.
     speech_slides: list[int] = Field(default_factory=list)
+    # Parallel to speech_slides. This lets the viewer select both the correct
+    # uploaded document and its page while the global slide id keeps the agent's
+    # existing topic and progress logic unchanged.
+    speech_sources: list[SourceReference] = Field(default_factory=list)
     avatar_state: AvatarState
     awaiting: Awaiting
     phase: str = ""
@@ -189,6 +206,7 @@ class TeacherResponse(_Model):
     lecture_summary: list[LectureSummarySection] = Field(default_factory=list)
     current_topic: int | None = None  # None before planning or after the end
     current_slide: int | None = None  # The PDF slide/page currently being explained
+    current_source: SourceReference | None = None
     completed_topics: list[int] = Field(default_factory=list)
     started_topics: list[int] = Field(default_factory=list)
     # Only true while the teacher is explaining: show the raise-hand button then.
@@ -214,6 +232,8 @@ class TeacherResponse(_Model):
             raise ValueError(f"completed_topics {missing} are not in the outline")
         if self.speech_slides and len(self.speech_slides) != len(self.speech):
             raise ValueError("speech_slides must match the number of speech segments")
+        if self.speech_sources and len(self.speech_sources) != len(self.speech):
+            raise ValueError("speech_sources must match the number of speech segments")
         return self
 
 

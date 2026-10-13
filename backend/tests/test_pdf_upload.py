@@ -1,4 +1,5 @@
 import asyncio
+import zipfile
 
 import httpx
 import pymupdf
@@ -232,6 +233,47 @@ def test_combined_media_preserves_order_and_source_metadata(monkeypatch):
     assert chunks[-1].end_seconds == 18.0
 
 
+def test_visual_media_cache_keeps_the_presentation_at_its_upload_index(monkeypatch):
+    class Upload:
+        def __init__(self, filename, content_type, payload):
+            self.filename = filename
+            self.content_type = content_type
+            self.payload = payload
+
+        async def read(self):
+            return self.payload
+
+    async def fake_process_pdf_bytes(payload):
+        return [LectureChunk(slide=1, text=payload.decode())]
+
+    async def fake_presentation_to_pdf(payload, _filename):
+        return b"converted-" + payload
+
+    monkeypatch.setattr(main, "process_pdf_bytes", fake_process_pdf_bytes)
+    monkeypatch.setattr(main, "presentation_to_pdf_bytes", fake_presentation_to_pdf)
+    viewer_sources = {}
+
+    chunks = asyncio.run(
+        main.process_media_uploads(
+            [
+                Upload("notes.pdf", "application/pdf", b"pdf material"),
+                Upload(
+                    "diagram.pptx",
+                    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                    b"presentation material",
+                ),
+            ],
+            viewer_sources,
+        )
+    )
+
+    assert viewer_sources == {0: b"pdf material", 1: b"converted-presentation material"}
+    assert [(chunk.slide, chunk.source_index, chunk.source_page) for chunk in chunks] == [
+        (1, 0, 1),
+        (2, 1, 1),
+    ]
+
+
 def test_video_transcription_keeps_whisper_segment_timestamps(monkeypatch):
     monkeypatch.setenv("GROQ_STT_API_KEY", "test-key")
 
@@ -265,7 +307,7 @@ def test_video_transcription_keeps_whisper_segment_timestamps(monkeypatch):
 def test_start_session_endpoint_accepts_multiple_media_sources(monkeypatch):
     captured = {}
 
-    async def fake_process_media(media):
+    async def fake_process_media(media, viewer_sources=None):
         captured["filenames"] = [upload.filename for upload in media]
         return [LectureChunk(slide=1, text="Combined lecture")]
 
@@ -301,3 +343,47 @@ def test_start_session_endpoint_accepts_multiple_media_sources(monkeypatch):
     assert response.json()["session_id"] == "combined-session"
     assert captured["filenames"] == ["one.pdf", "two.pdf", "recap.mp4"]
     assert captured["request"].lecture == [LectureChunk(slide=1, text="Combined lecture")]
+
+
+def test_session_source_endpoint_serves_cached_pdf(monkeypatch):
+    class FakeTeacher:
+        def get_session(self, _session_id):
+            return object()
+
+    monkeypatch.setattr(main, "get_teacher", lambda: FakeTeacher())
+    main.session_viewer_sources["source-session"] = {1: b"%PDF-test"}
+
+    response = TestClient(app).get("/api/sessions/source-session/sources/1.pdf")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/pdf"
+    assert response.content == b"%PDF-test"
+    main.session_viewer_sources.pop("source-session", None)
+
+
+def test_presentation_uses_powerpoint_when_libreoffice_is_unavailable(monkeypatch):
+    monkeypatch.setattr(main, "libreoffice_executable", lambda: None)
+    monkeypatch.setattr(main, "powerpoint_executable", lambda: "POWERPNT.EXE")
+    monkeypatch.setattr(main, "convert_with_powerpoint", lambda _source, _output: b"%PDF-powerpoint")
+
+    assert main.convert_presentation_bytes(b"presentation", "lecture.pptx") == b"%PDF-powerpoint"
+
+
+def test_pptx_text_fallback_creates_a_viewable_pdf(tmp_path):
+    source = tmp_path / "fallback.pptx"
+    with zipfile.ZipFile(source, "w") as archive:
+        archive.writestr(
+            "ppt/slides/slide1.xml",
+            (
+                '<p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" '
+                'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">'
+                '<a:t>Fallback title</a:t><a:t>Fallback explanation</a:t></p:sld>'
+            ),
+        )
+
+    pdf_bytes = main.convert_pptx_text_to_pdf(source)
+
+    assert pdf_bytes.startswith(b"%PDF")
+    with pymupdf.open(stream=pdf_bytes, filetype="pdf") as document:
+        assert document.page_count == 1
+        assert "Fallback title" in document[0].get_text()

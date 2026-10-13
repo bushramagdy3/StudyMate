@@ -6,6 +6,9 @@ records which slides each topic comes from, so later steps teach from the
 real slide content.
 """
 
+import math
+import re
+
 from pydantic import BaseModel, Field
 
 from agent.contract import LectureChunk, LectureSummarySection
@@ -13,12 +16,11 @@ from agent.llm import LLM, LLMError, messages
 from agent.personalities import get_personality
 from agent.state import Mode, OutlineTopic, TeacherState
 
-MAX_TOPICS = 12
+MAX_TOPICS = 8
 # Above this many characters of slide text, slides are condensed first so the
 # planning prompt stays well within the model's context window.
 MAX_PLANNING_CHARS = 40_000
 CONDENSE_BATCH_CHARS = 15_000
-FALLBACK_SLIDES_PER_TOPIC = 3
 
 
 # ---------------------------------------------------------------------------
@@ -34,13 +36,9 @@ class PlannedTopic(BaseModel):
 
 
 class LecturePlan(BaseModel):
-    title: str = Field(
+    opening: str = Field(
         default="",
-        description="A short, content-grounded title for the whole lecture, 2-7 words",
-    )
-    overview: str = Field(
-        default="",
-        description="One brief student-facing sentence describing the whole lecture",
+        description="One brief, natural spoken sentence introducing what the whole lecture is about",
     )
     topics: list[PlannedTopic] = Field(min_length=1)
     lecture_summary: list[LectureSummarySection] = Field(
@@ -71,9 +69,10 @@ PLANNER_SYSTEM = (
 
 
 def topic_range(slide_count: int) -> tuple[int, int]:
-    """Roughly one topic per two slides, between 1 and MAX_TOPICS."""
-    target = max(1, round(slide_count / 2))
-    return max(1, min(target - 1, MAX_TOPICS)), min(target + 2, MAX_TOPICS)
+    """Broad lesson units: roughly one topic for every four visual pages."""
+    target = max(1, math.ceil(slide_count / 4))
+    high = min(MAX_TOPICS, max(2, target) if slide_count > 1 else 1)
+    return max(1, high - 1), high
 
 
 def format_slides(lecture: list[LectureChunk]) -> str:
@@ -103,13 +102,17 @@ Split this lecture into between {low} and {high} small topics, in the order they
 Rules:
 - Each topic is ONE concept that can be taught in 2 to 4 minutes.
 - Topics don't have to match slides: merge slides about the same idea, or split a slide that covers several ideas.
+- Treat all uploaded files as one continuous lecture. A file boundary alone is never a topic boundary.
 - Skip slides with no teaching content, such as the title, agenda, "questions?", "thank you" or reference slides.
 - For each topic, list the slide numbers it is taught from in source_slides.
 - Key points must come from the slides. Do not add information that isn't in them.
-- Also provide title and overview for the opening. Title is a short name for the WHOLE
-  lecture. Overview is one plain-language sentence explaining what the lecture covers.
-  Describe the material directly; never write learning objectives or phrases such as
-  "the student should understand", "students will learn", or "today's lecture".
+- A topic title is a 2-6 word concept label for the outline, not a sentence or a visual description.
+  Never use wording such as "This slide", "This page", "part of a", or "the slide shows".
+  Use readable title case while preserving acronyms such as HTTP, DNS, and TCP.
+- Also provide opening: ONE natural, student-facing spoken sentence that briefly says
+  what the whole lecture is about. Describe the material directly, not the lesson plan.
+  Do not greet, repeat the lecture title, mention slides, use learning-objective wording,
+  or give instructions; the app speaks the welcome and the outline instruction separately.
 - Also write lecture_summary as 2 to 4 short revision sections. Each section needs a
   2-5 word heading and 1 to 3 concise bullet points. Cover the key concepts in order.
   It is read silently in the student's revision popup, so make it easy to scan."""
@@ -118,8 +121,7 @@ Rules:
 def intro_speech(
     outline: list[OutlineTopic],
     environment,
-    title: str = "",
-    overview: str = "",
+    opening: str = "",
 ) -> str:
     role = get_personality(environment).role
     tag = {
@@ -128,25 +130,9 @@ def intro_speech(
         "study friend": "[excited]",
     }[role]
 
-    fallback_title, fallback_overview = fallback_opening(outline)
-    clean_title = title.strip() or fallback_title
-    clean_overview = overview.strip()
-    if any(
-        phrase in clean_overview.lower()
-        for phrase in (
-            "student should understand",
-            "student will learn",
-            "students will learn",
-            "the student will",
-            "learning objective",
-        )
-    ):
-        clean_overview = ""
-    clean_overview = clean_overview or fallback_overview
-
+    brief = " ".join(opening.split()).strip() or fallback_opening(outline)[1]
     return (
-        f"{tag} Welcome. This lecture is about {clean_title.rstrip('.')}. "
-        f"{clean_overview.rstrip('.')}. "
+        f"{tag} Welcome. {brief.rstrip('.')}. "
         "Choose a topic from the outline when you are ready, and I will teach it step by step."
     )
 
@@ -159,9 +145,9 @@ def fallback_opening(outline: list[OutlineTopic]) -> tuple[str, str]:
 
     title = topic_names[0]
     if len(topic_names) == 1:
-        overview = f"A focused introduction to {title}"
+        overview = f"We will focus on {title}"
     else:
-        overview = f"A guided look at {', '.join(topic_names)}"
+        overview = f"We will connect {', '.join(topic_names)}"
     return title, overview
 
 
@@ -182,7 +168,7 @@ def fallback_lecture_summary(outline: list[OutlineTopic]) -> list[dict]:
 def plan_lecture_with_summary(
     llm: LLM,
     lecture: list[LectureChunk],
-) -> tuple[list[OutlineTopic], list[dict], str, str]:
+) -> tuple[list[OutlineTopic], list[dict], str]:
     """Create the outline and a revision-ready summary in one planning request."""
     try:
         planning_input = lecture
@@ -199,56 +185,163 @@ def plan_lecture_with_summary(
             return (
                 outline,
                 summary or fallback_lecture_summary(outline),
-                plan.title,
-                plan.overview,
+                plan.opening,
             )
     except LLMError:
         pass
     outline = fallback_outline(lecture)
-    return outline, fallback_lecture_summary(outline), "", ""
+    return outline, fallback_lecture_summary(outline), ""
 
 
 def plan_lecture(llm: LLM, lecture: list[LectureChunk]) -> list[OutlineTopic]:
     """Create the outline. Kept as a small compatibility wrapper for callers/tests."""
-    outline, _summary, _title, _overview = plan_lecture_with_summary(llm, lecture)
+    outline, _summary, _opening = plan_lecture_with_summary(llm, lecture)
     return outline
 
 
 def clean_outline(plan: LecturePlan, lecture: list[LectureChunk]) -> list[OutlineTopic]:
-    """Fix the usual LLM slips: made-up slide numbers, empty titles, too many topics."""
+    """Publish only broad, source-backed topics with readable labels."""
     valid_slides = {chunk.slide for chunk in lecture}
     outline = []
-    for topic in plan.topics[:MAX_TOPICS]:
-        title = topic.title.strip()
-        if not title:
+    for position, topic in enumerate(plan.topics):
+        source_slides = sorted({slide for slide in topic.source_slides if slide in valid_slides})
+        if not source_slides:
             continue
-        outline.append(
-            OutlineTopic(
-                title=title,
-                summary=topic.summary.strip(),
-                key_points=[point.strip() for point in topic.key_points if point.strip()],
-                source_slides=sorted({s for s in topic.source_slides if s in valid_slides}),
-            )
+        cleaned = OutlineTopic(
+            title=topic_title(topic.title, topic.key_points, source_slides, lecture, position + 1),
+            summary=topic.summary.strip(),
+            key_points=[point.strip() for point in topic.key_points if point.strip()],
+            source_slides=source_slides,
         )
-    return outline
+        if outline and outline[-1]["title"].casefold() == cleaned["title"].casefold():
+            outline[-1] = merge_topic_group([outline[-1], cleaned])
+        else:
+            outline.append(cleaned)
+    return coalesce_topics(outline, topic_range(len(lecture))[1])
 
 
 def fallback_outline(lecture: list[LectureChunk]) -> list[OutlineTopic]:
-    """If planning fails, teach the slides in order, a few at a time."""
+    """If planning fails, create a small number of source-backed lesson units."""
     outline = []
-    for start in range(0, len(lecture), FALLBACK_SLIDES_PER_TOPIC):
-        group = lecture[start : start + FALLBACK_SLIDES_PER_TOPIC]
-        first_line = next((line.strip() for line in group[0].text.splitlines() if line.strip()), "")
+    max_topics = topic_range(len(lecture))[1]
+    slides_per_topic = max(1, math.ceil(len(lecture) / max_topics))
+    for start in range(0, len(lecture), slides_per_topic):
+        group = lecture[start : start + slides_per_topic]
         slides = [chunk.slide for chunk in group]
         outline.append(
             OutlineTopic(
-                title=first_line[:60] or f"Slides {slides[0]}-{slides[-1]}",
+                title=topic_title("", [], slides, lecture, len(outline) + 1),
                 summary="",
                 key_points=[],
                 source_slides=slides,
             )
         )
-    return outline
+    return coalesce_topics(outline, max_topics)
+
+
+_TITLE_PREFIX = re.compile(r"^(?:this|the)\s+(?:slide|page)(?:\s+shows|\s+is|\s*,)?\s*", re.I)
+_TITLE_WORDS = {"is", "are", "was", "were", "sends", "send", "shows", "show", "uses", "use", "used", "explains", "explain", "covers", "cover", "introduces", "introduce", "can", "will"}
+_ACRONYM = re.compile(r"^[A-Z]{2,}(?:[/.-][A-Z0-9.]+)*$")
+
+
+def topic_title(
+    proposed: str,
+    key_points: list[str],
+    source_slides: list[int],
+    lecture: list[LectureChunk],
+    position: int,
+) -> str:
+    """Turn planner/extractor prose into a short outline label."""
+    source_text = [
+        line.strip()
+        for chunk in lecture
+        if chunk.slide in set(source_slides)
+        for line in chunk.text.splitlines()
+        if line.strip()
+    ]
+    # A model title is useful only when it is actually a compact label. Raw
+    # descriptions such as "This slide, part of ..." must not win over the
+    # source's own heading.
+    candidates = []
+    if _is_compact_label(proposed):
+        candidates.append(proposed)
+    candidates.extend([*source_text, *key_points])
+    for candidate in candidates:
+        label = _label_from_text(candidate)
+        if label:
+            return label
+    return f"Topic {position}"
+
+
+def _is_compact_label(value: str) -> bool:
+    words = value.strip().split()
+    # Keep a concise one-word concept when the model has supplied one, even
+    # though the prompt prefers 2-6 words (for example, "Pipelining").
+    if not 1 <= len(words) <= 6:
+        return False
+    lowered = value.casefold()
+    return not lowered.startswith(("this slide", "this page", "the slide", "the page", "part of"))
+
+
+def _label_from_text(value: str) -> str:
+    text = " ".join(value.replace("…", " ").split()).strip(" -:;,.!")
+    if not text:
+        return ""
+    lowered = text.casefold()
+    if lowered.startswith(("this slide", "this page", "the slide", "the page")):
+        match = re.search(r"part of\s+(?:a|an|the)?\s*([^.,;]+)", text, re.I)
+        if match:
+            text = re.split(r"\b(?:lecture|course|presentation|deck)\b", match.group(1), flags=re.I)[0].strip()
+        else:
+            text = _TITLE_PREFIX.sub("", text)
+    text = re.split(r"[:;]", text, maxsplit=1)[0].strip()
+    words = text.split()
+    if not words:
+        return ""
+    for index, word in enumerate(words):
+        if word.strip(".,!?;").casefold() in _TITLE_WORDS and index >= 2:
+            words = words[:index]
+            break
+    if len(words) > 6:
+        words = words[:6]
+    label = " ".join(words).strip(" -:;,.!")
+    if not label or label.casefold().startswith(("this slide", "this page", "part of")):
+        return ""
+    return _title_case(label)
+
+
+def _title_case(value: str) -> str:
+    words = []
+    for word in value.split():
+        bare = word.strip(".,:;()")
+        if _ACRONYM.fullmatch(bare):
+            words.append(word)
+        elif bare.isupper():
+            words.append(word.capitalize())
+        else:
+            words.append(word)
+    return " ".join(words)
+
+
+def merge_topic_group(topics: list[OutlineTopic]) -> OutlineTopic:
+    """Join adjacent outline units without dropping their source references."""
+    first = topics[0]
+    titles = [topic["title"] for topic in topics]
+    title = " and ".join(titles[:2]) if len(set(titles)) > 1 else first["title"]
+    return OutlineTopic(
+        title=_label_from_text(title) or first["title"],
+        summary=" ".join(topic["summary"] for topic in topics if topic["summary"]).strip(),
+        key_points=list(dict.fromkeys(point for topic in topics for point in topic["key_points"]))[:5],
+        source_slides=sorted({slide for topic in topics for slide in topic["source_slides"]}),
+    )
+
+
+def coalesce_topics(topics: list[OutlineTopic], maximum: int) -> list[OutlineTopic]:
+    """Keep an outline at its lesson-unit scale even if the planner over-splits."""
+    if len(topics) <= maximum:
+        return topics
+    size = math.ceil(len(topics) / maximum)
+    return [merge_topic_group(topics[start : start + size]) for start in range(0, len(topics), size)]
 
 
 # ---------------------------------------------------------------------------
@@ -312,8 +405,8 @@ def make_plan_node(llm: LLM):
     """The 'plan' node: runs once at the start of a session."""
 
     def plan(state: TeacherState) -> dict:
-        outline, lecture_summary, title, overview = plan_lecture_with_summary(llm, state["lecture"])
-        intro = intro_speech(outline, state["environment"], title, overview)
+        outline, lecture_summary, opening = plan_lecture_with_summary(llm, state["lecture"])
+        intro = intro_speech(outline, state["environment"], opening)
         return {
             "outline": outline,
             "lecture_summary": lecture_summary,

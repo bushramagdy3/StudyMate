@@ -506,14 +506,22 @@ button {
   transform-origin: center;
 }
 
+.drop-zone:hover,
+.drop-zone:focus-visible {
+  background: rgba(92, 51, 40, 0.72);
+  border-color: #f1a16a;
+  box-shadow: inset 0 0 0 2px rgba(255, 224, 181, 0.14);
+  outline: 0;
+}
+
 .upload-panel--empty .drop-zone {
   min-height: 208px;
 }
 
 .upload-panel--filled .drop-zone {
-  flex-direction: row;
-  gap: 18px;
-  min-height: 150px;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 184px;
 }
 
 .upload-media-icon {
@@ -530,9 +538,8 @@ button {
 }
 
 .upload-panel--filled .upload-media-icon {
-  flex: 0 0 156px;
-  height: 112px;
-  width: 156px;
+  height: 96px;
+  width: 154px;
 }
 
 .drop-zone-copy {
@@ -570,13 +577,26 @@ button {
 }
 
 .selected-file-icon {
-  height: 62%;
+  height: 68%;
   image-rendering: pixelated;
   left: 2.9%;
   object-fit: contain;
   position: absolute;
-  top: 19%;
-  width: 5.4%;
+  top: 16%;
+  width: 7.2%;
+}
+
+/* The pixel assets share a canvas but not the same transparent padding. */
+.selected-file-icon--pdf {
+  transform: scale(1.15);
+}
+
+.selected-file-icon--video {
+  transform: scale(1.45);
+}
+
+.selected-file-icon--presentation {
+  transform: scale(1.55);
 }
 
 .selected-file-name {
@@ -642,6 +662,16 @@ button {
   image-rendering: pixelated;
   object-fit: contain;
   width: 100%;
+}
+
+.selected-file button:hover img,
+.selected-file button:focus-visible img {
+  filter: sepia(1) saturate(3.4) hue-rotate(328deg) brightness(1.22);
+}
+
+.selected-file button:focus-visible {
+  outline: 2px solid #ffd5a4;
+  outline-offset: 1px;
 }
 
 .upload-note {

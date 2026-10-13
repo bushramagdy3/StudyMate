@@ -96,11 +96,13 @@ def make_repeat_node(llm: LLM):
     """
 
     def repeat(state: TeacherState) -> dict:
-        segments, points, pace = generate_explanation(llm, state, previous=state["segments"])
+        segments, points, pace, segment_slides = generate_explanation(
+            llm, state, previous=state["segments"]
+        )
         segments, points, segment_slides = add_slide_transitions(
             segments,
             points,
-            state["outline"][state["current_topic"]]["source_slides"],
+            segment_slides,
         )
         return {
             "pending_question": None,

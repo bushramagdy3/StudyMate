@@ -6,6 +6,7 @@ import pytest
 from agent import llm as llm_module
 from agent.contract import Environment, LectureChunk, StartSessionRequest
 from agent.explaining import (
+    Explanation,
     add_slide_transitions,
     choose_question_points,
     default_question_points,
@@ -18,7 +19,7 @@ from agent.explaining import (
     next_stop,
 )
 from agent.llm import LLM
-from agent.state import Mode, initial_state
+from agent.state import Mode, initial_state, to_response
 
 LECTURE = [
     LectureChunk(slide=1, text="Web Protocols"),
@@ -47,7 +48,7 @@ def make_state(environment=Environment.LECTURE_HALL, topic=0, **fields):
     return state | {"outline": OUTLINE, "current_topic": topic} | fields
 
 
-def fake_llm(segments=None, question_after=None, status=200, pace=None):
+def fake_llm(segments=None, question_after=None, status=200, pace=None, segment_slides=None):
     sent = []
 
     def handler(request):
@@ -57,6 +58,7 @@ def fake_llm(segments=None, question_after=None, status=200, pace=None):
         reply = {"segments": segments, "question_after": question_after or []}
         if pace:
             reply["pace"] = pace
+        reply["segment_slides"] = segment_slides if segment_slides is not None else [2] * len(segments or [])
         content = json.dumps(reply)
         return httpx.Response(200, json={"choices": [{"message": {"content": content}}]})
 
@@ -122,6 +124,11 @@ def test_prompt_uses_personality_and_slides_without_a_second_introduction():
     assert "exactly 2 segment number(s)" in user
 
 
+def test_explanation_requires_one_source_slide_per_segment():
+    with pytest.raises(ValueError):
+        Explanation.model_validate({"segments": ["One."], "question_after": [1]})
+
+
 def test_later_topics_connect_to_covered_ones_without_greeting():
     state = make_state(topic=1, completed_topics=[0], history=[{"role": "teacher", "text": "Hi"}])
     prompt = explain_prompt(state)
@@ -154,13 +161,12 @@ def test_llm_failure_uses_fallback_segments():
     llm, _ = fake_llm(status=503)
     segments, points = generate_segments(llm, make_state())
     assert segments == [
-        "Let's look at Pipelining.",
         "Sending requests without waiting.",
         "several requests at once.",
     ]
-    assert points == [2, 3]  # questions stay at the ends of the original idea groups
+    assert points == [1, 2]  # questions stay at the ends of the original idea groups
     assert fallback_segments(OUTLINE[0]) == [
-        "Let's look at Pipelining. Sending requests without waiting.",
+        "Sending requests without waiting.",
         "several requests at once.",
     ]
 
@@ -209,31 +215,85 @@ def test_slide_transitions_are_spoken_and_keep_question_boundaries():
     segments, points, slides = add_slide_transitions(
         ["first", "second", "third", "fourth"],
         [2, 4],
-        [2, 3],
+        [2, 2, 3, 3],
     )
 
-    assert segments == [
-        "first",
-        "second",
-        "[thoughtful] Let me show you the next slide.",
-        "third",
-        "fourth",
-    ]
-    assert slides == [2, 2, 3, 3, 3]
-    assert points == [2, 5]
+    assert segments == ["first", "second", "third", "fourth"]
+    assert slides == [2, 2, 3, 3]
+    assert points == [2, 4]
 
 
 def test_explanation_response_pairs_each_played_segment_with_a_slide():
     multi_slide_outline = OUTLINE[:1]
     multi_slide_outline[0] = multi_slide_outline[0] | {"source_slides": [2, 3]}
-    llm, _ = fake_llm(["first", "second", "third", "fourth"], question_after=[2, 4])
+    llm, _ = fake_llm(
+        ["first", "second", "third", "fourth"],
+        question_after=[2, 4],
+        segment_slides=[2, 2, 3, 3],
+    )
     update = make_explain_node(llm)(
         make_state(outline=multi_slide_outline)
     )
 
     assert update["speech"] == ["first", "second"]
     assert update["speech_slides"] == [2, 2]
-    assert update["segment_slides"] == [2, 2, 3, 3, 3]
+    assert update["segment_slides"] == [2, 2, 3, 3]
+
+
+def test_response_keeps_the_uploaded_source_for_each_spoken_segment():
+    lecture = [
+        LectureChunk(
+            slide=1,
+            text="First PDF page",
+            source_name="notes.pdf",
+            source_index=0,
+            source_type="pdf",
+            source_page=1,
+        ),
+        LectureChunk(
+            slide=2,
+            text="Converted presentation page",
+            source_name="charts.pptx",
+            source_index=1,
+            source_type="ppt",
+            source_page=3,
+        ),
+    ]
+    state = initial_state("combined", StartSessionRequest(environment=Environment.STUDY_ROOM, lecture=lecture))
+    response = to_response(
+        state
+        | {
+            "speech": ["First page.", "Now the chart."],
+            "speech_slides": [1, 2],
+            "current_slide": 2,
+            "mode": Mode.EXPLAINING,
+        }
+    )
+
+    assert [(source.source_name, source.source_page) for source in response.speech_sources] == [
+        ("notes.pdf", 1),
+        ("charts.pptx", 3),
+    ]
+    assert response.current_source.source_index == 1
+
+
+def test_explanation_switches_to_the_presentation_source_when_its_segment_uses_it():
+    lecture = [
+        LectureChunk(slide=1, text="PDF overview", source_name="notes.pdf", source_index=0, source_type="pdf", source_page=1),
+        LectureChunk(slide=2, text="PPT diagram", source_name="diagram.pptx", source_index=1, source_type="ppt", source_page=2),
+    ]
+    state = make_state(
+        environment=Environment.CAFE,
+        lecture=lecture,
+        outline=[{"title": "Combined topic", "summary": "", "key_points": [], "source_slides": [1, 2]}],
+    )
+    llm, _ = fake_llm(["The PDF introduces the idea.", "The diagram applies it."], [2], segment_slides=[1, 2])
+
+    update = make_explain_node(llm)(state)
+    response = to_response(state | update)
+
+    assert [source.source_index for source in response.speech_sources] == [0, 1]
+    assert [source.source_page for source in response.speech_sources] == [1, 2]
 
 
 # --- pacing -------------------------------------------------------------------
@@ -249,27 +309,27 @@ def test_prompt_asks_the_llm_to_pace_the_topic():
 def test_slow_topics_can_be_longer_than_normal():
     eight = [f"Idea {n}." for n in range(8)]
     llm, _ = fake_llm(eight, [4, 8], pace="slow")
-    segments, points, pace = generate_explanation(llm, make_state())  # professor: up to 8
+    segments, points, pace, _slides = generate_explanation(llm, make_state())  # professor: up to 8
     assert pace == "slow"
     assert len(segments) == 8 and points == [4, 8]
 
 
 def test_too_many_segments_are_merged_at_the_maximum():
     llm, _ = fake_llm([f"Idea {n}." for n in range(12)], [4, 12], pace="slow")
-    segments, _, _ = generate_explanation(llm, make_state(environment=Environment.CAFE))  # up to 6
+    segments, _, _pace, _slides = generate_explanation(llm, make_state(environment=Environment.CAFE))  # up to 6
     assert len(segments) == 12  # 6 groups, the last holding 7 sentences split for playback
     assert segments[-1] == "Idea 11."
 
 
 def test_quick_topics_can_be_short():
     llm, _ = fake_llm(["One.", "Two."], [1, 2], pace="quick")
-    segments, points, pace = generate_explanation(llm, make_state())
+    segments, points, pace, _slides = generate_explanation(llm, make_state())
     assert (segments, points, pace) == (["One.", "Two."], [1, 2], "quick")
 
 
 def test_a_repeat_is_never_quick():
     llm, _ = fake_llm(["One.", "Two."], [1, 2], pace="quick")
-    _, _, pace = generate_explanation(llm, make_state(), previous=["old"])
+    _, _, pace, _slides = generate_explanation(llm, make_state(), previous=["old"])
     assert pace == "normal"
     assert "don't choose the" in explain_prompt(make_state(), previous=["old"])
 

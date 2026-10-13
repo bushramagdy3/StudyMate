@@ -9,6 +9,7 @@ import { BackgroundMusic } from './components/BackgroundMusic.jsx'
 import {
   abortAllSessionRequests,
   deleteSession,
+  getSessionSourcePdfUrl,
   startSession,
 } from './api/studyMateApi.js'
 import { environments } from './data/environments.js'
@@ -46,8 +47,7 @@ function App() {
   const [isLoadingSession, setIsLoadingSession] = useState(false)
   const [dialog, setDialog] = useState(null)
   const [mediaFiles, setMediaFiles] = useState([])
-  const [pdfUrl, setPdfUrl] = useState('')
-  const pdfUrlRef = useRef('')
+  const [sourceViewerUrls, setSourceViewerUrls] = useState({})
   const startSessionRequest = useRef(null)
   const [environmentId, setEnvironmentId] = useState(getInitialEnvironmentId)
   const [teacherResponse, setTeacherResponse] = useState(null)
@@ -88,9 +88,6 @@ function App() {
     return () => {
       abortStartSession()
 
-      if (pdfUrlRef.current) {
-        URL.revokeObjectURL(pdfUrlRef.current)
-      }
     }
   }, [])
 
@@ -102,22 +99,8 @@ function App() {
   }
 
   function changeMediaFiles(files) {
-    if (pdfUrlRef.current) {
-      URL.revokeObjectURL(pdfUrlRef.current)
-      pdfUrlRef.current = ''
-    }
-
-    // PDF.js previews one source only. Preserve the single-PDF preview without
-    // rendering an unrelated page when a combined session starts.
-    const firstPdf = files.length === 1 && files[0].name.toLowerCase().endsWith('.pdf')
-    if (!firstPdf) {
-      setPdfUrl('')
-      return
-    }
-
-    const nextPdfUrl = URL.createObjectURL(firstPdf)
-    pdfUrlRef.current = nextPdfUrl
-    setPdfUrl(nextPdfUrl)
+    setMediaFiles(files)
+    setSourceViewerUrls({})
   }
 
   function goToPage(nextPage, nextEnvironmentId = environmentId) {
@@ -161,6 +144,17 @@ function App() {
       }
 
       startSessionRequest.current = null
+      const viewerUrls = Object.fromEntries(
+        mediaFiles
+          .map((file, sourceIndex) => {
+            const extension = file.name.split('.').pop()?.toLowerCase()
+            return extension === 'pdf' || extension === 'ppt' || extension === 'pptx'
+              ? [sourceIndex, getSessionSourcePdfUrl(response.session_id, sourceIndex)]
+              : null
+          })
+          .filter(Boolean),
+      )
+      setSourceViewerUrls(viewerUrls)
       setTeacherResponse(response)
       setIsLoadingSession(false)
       goToPage('session', environmentId)
@@ -253,7 +247,6 @@ function App() {
         <UploadPdfPage
           mediaFiles={mediaFiles}
           onMediaFilesChange={(files) => {
-            setMediaFiles(files)
             changeMediaFiles(files)
           }}
           onBack={() => goToPage('home')}
@@ -275,7 +268,7 @@ function App() {
         <SessionPage
           environment={selectedEnvironment}
           initialTeacherResponse={teacherResponse}
-          pdfUrl={pdfUrl}
+          sourceViewerUrls={sourceViewerUrls}
           onTeacherResponseChange={setTeacherResponse}
           onError={showError}
         />

@@ -335,7 +335,11 @@ def featherless_with_quiz():
         if "Write the explanation" in full:
             calls["explain"] += 1
             n = calls["explain"]
-            return text_reply(json.dumps({"segments": [f"e{n}-s0"], "question_after": [1]}))
+            return text_reply(json.dumps({
+                "segments": [f"e{n}-s0"],
+                "segment_slides": [1],
+                "question_after": [1],
+            }))
         if "Ask the student ONE question" in full:
             return text_reply(json.dumps({"question": "Why?", "expected_answer": "x", "explanation": "y"}))
         if "The student answered" in full:

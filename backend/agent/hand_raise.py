@@ -95,6 +95,8 @@ def student_question_prompt(state: TeacherState, question: str) -> str:
     lines += [
         "Answer their question in 2 to 4 spoken sentences.",
         "- Questions about any slide in the CURRENT topic are allowed, including an earlier slide. Choose that relevant slide number.",
+        "- Speak as though you are looking at the exact slide you choose. When it has a diagram, chart, table, equation, or example, explain what that visual shows rather than reading it aloud.",
+        "- If you move to another current-topic slide, introduce it naturally, for example: 'Let's look at how this is illustrated on this slide' or 'Moving to the next slide, we can see'.",
         "- If the question is about another topic, do not teach it yet. Say that you can answer it once this topic is finished and they choose that topic from the outline.",
         "- If the lecture doesn't cover it, say so briefly and give a short general answer.",
         "- If it is unrelated to the lecture, answer in one sentence and gently bring them back.",

@@ -41,6 +41,12 @@ class Explanation(BaseModel):
         description='"slow" for deep or new concepts, "quick" for intuitive or familiar ones',
     )
     segments: list[str]
+    segment_slides: list[int] = Field(
+        description=(
+            "One source slide number for each explanation segment, using the provided "
+            "global slide numbers. Repeat a number while continuing to explain the same page."
+        ),
+    )
     question_after: list[int] = Field(
         description="Segment numbers (1 = first segment) after which to pause and ask a question"
     )
@@ -185,6 +191,10 @@ def explain_prompt(state: TeacherState, previous: list[str] | None = None) -> st
         "Teach clearly: define new terms before using them, then explain the idea step by step.",
         "When a slide contains a diagram, table, equation, chart, or visual example, explicitly explain what it shows and how it supports the concept.",
         "If the slide has labels, axes, arrows, rows, columns, formulas, or examples, refer to their meaning rather than vaguely saying 'the visual'.",
+        "segment_slides is required. For every segment, return its source slide in segment_slides. The list must have the same length as segments and use only the listed topic slide numbers.",
+        "Choose the page that supplies the exact fact or visual being explained. If a later PDF, PowerPoint, diagram, or textbook page supplies an idea, the segment that teaches it must use that page instead of the opening page.",
+        "Keep the same source slide for consecutive segments whenever they explain the same visual or idea. Switch only when the next segment genuinely depends on another page, such as a specific diagram, example, or textbook page.",
+        "Start directly with the explanation. Do not recap a previous segment or announce a page change. When a switch genuinely helps the listener, weave one brief, varied reference to the new visual into that segment; never repeat a transition phrase.",
         "Don't ask the student questions; questions come separately.",
         "",
         f"Also choose where to pause and ask the student a question: in question_after, list "
@@ -199,14 +209,14 @@ def generate_segments(
     llm: LLM, state: TeacherState, previous: list[str] | None = None
 ) -> tuple[list[str], list[int]]:
     """The current topic's explanation as (segments, question_points)."""
-    segments, points, _pace = generate_explanation(llm, state, previous)
+    segments, points, _pace, _slides = generate_explanation(llm, state, previous)
     return segments, points
 
 
 def generate_explanation(
     llm: LLM, state: TeacherState, previous: list[str] | None = None
-) -> tuple[list[str], list[int], str]:
-    """The current topic's explanation as (segments, question_points, pace).
+) -> tuple[list[str], list[int], str, list[int]]:
+    """The current topic's explanation as (segments, question_points, pace, slides).
 
     `previous` is set when the student asked to hear the topic again (repeat):
     the old explanation, or [] if it's no longer available.
@@ -225,7 +235,12 @@ def generate_explanation(
         pace = explanation.pace
         if previous is not None and pace == "quick":
             pace = "normal"  # they asked to hear it again: never rush it
-        grouped_segments = fit_segments(explanation.segments, most)
+        grouped_segments, grouped_slides = fit_segment_sources(
+            explanation.segments,
+            explanation.segment_slides,
+            most,
+            topic["source_slides"],
+        )
         segments, group_ends = split_into_sentence_segments(grouped_segments)
         if segments:
             mapped_points = [
@@ -236,7 +251,7 @@ def generate_explanation(
             points = choose_question_points(
                 mapped_points, len(segments), personality.questions_per_topic
             )
-            return segments, points, pace
+            return segments, points, pace, expand_group_slides(grouped_slides, group_ends)
     except LLMError:
         pass
     grouped_segments = fallback_segments(topic)
@@ -245,47 +260,77 @@ def generate_explanation(
         len(grouped_segments), personality.questions_per_topic
     )
     points = [group_ends[point - 1] for point in grouped_points]
-    return segments, points, "normal"
+    return segments, points, "normal", fallback_segment_slides(segments, topic["source_slides"])
 
 
-def slides_for_segments(segments: list[str], source_slides: list[int]) -> list[int]:
-    """Distribute sentence-sized teaching segments across a topic's source slides."""
-    if not source_slides or not segments:
-        return []
-    return [
-        source_slides[min(index * len(source_slides) // len(segments), len(source_slides) - 1)]
-        for index in range(len(segments))
+def fit_segment_sources(
+    segments: list[str], proposed_slides: list[int], maximum: int, source_slides: list[int]
+) -> tuple[list[str], list[int]]:
+    """Keep each explanation group paired with the source page it actually uses."""
+    # A partial model response must never invent a page change. Staying on the
+    # opening page is less surprising than treating a short, invalid list as a
+    # real source map.
+    mapped_slides = (
+        proposed_slides if len(proposed_slides) == len(segments) else [None] * len(segments)
+    )
+    pairs = [
+        (segment.strip(), mapped_slides[index])
+        for index, segment in enumerate(segments)
+        if segment.strip()
     ]
+    valid_slides = set(source_slides)
+    fallback = source_slides[0] if source_slides else None
+    pairs = [(segment, slide if slide in valid_slides else fallback) for segment, slide in pairs]
+    # Some model responses repeat the same sentence when they change pace.
+    # Remove only exact consecutive duplicates; distinct explanations remain.
+    deduplicated = []
+    for segment, slide in pairs:
+        normalized = " ".join(segment.casefold().split())
+        if not deduplicated or normalized != deduplicated[-1][0]:
+            deduplicated.append((normalized, segment, slide))
+    pairs = [(segment, slide) for _normalized, segment, slide in deduplicated]
+    # Preserve a segment's source truth. Only collapse adjacent ideas when
+    # they already refer to the same page; never merge text from two pages.
+    while len(pairs) > maximum:
+        merge_at = next(
+            (index for index in range(len(pairs) - 1) if pairs[index][1] == pairs[index + 1][1]),
+            None,
+        )
+        if merge_at is None:
+            break
+        first, second = pairs[merge_at : merge_at + 2]
+        pairs[merge_at : merge_at + 2] = [(f"{first[0]} {second[0]}", first[1])]
+    return (
+        [segment for segment, _slide in pairs],
+        [slide for _segment, slide in pairs],
+    )
+
+
+def expand_group_slides(group_slides: list[int | None], group_ends: list[int]) -> list[int]:
+    """Repeat a group's source page for every sentence-sized playback chunk."""
+    expanded = []
+    start = 0
+    for slide, end in zip(group_slides, group_ends):
+        if slide is not None:
+            expanded.extend([slide] * (end - start))
+        start = end
+    return expanded
+
+
+def fallback_segment_slides(segments: list[str], source_slides: list[int]) -> list[int]:
+    """A safe fallback stays on the opening source page rather than guessing changes."""
+    return [source_slides[0]] * len(segments) if source_slides else []
 
 
 def add_slide_transitions(
     segments: list[str],
     points: list[int],
-    source_slides: list[int],
+    segment_slides: list[int],
 ) -> tuple[list[str], list[int], list[int]]:
-    """Insert a spoken slide-change cue and preserve question boundaries."""
-    mapped_slides = slides_for_segments(segments, source_slides)
-    if not mapped_slides:
+    """Keep source changes silent; the model already owns natural visual references."""
+    if len(segment_slides) != len(segments):
         return segments, points, []
-
-    decorated_segments = []
-    decorated_slides = []
-    source_ends = []
-
-    for index, (segment, slide) in enumerate(zip(segments, mapped_slides)):
-        if index > 0 and slide != mapped_slides[index - 1]:
-            decorated_segments.append("[thoughtful] Let me show you the next slide.")
-            decorated_slides.append(slide)
-        decorated_segments.append(segment)
-        decorated_slides.append(slide)
-        source_ends.append(len(decorated_segments))
-
-    decorated_points = [
-        source_ends[point - 1]
-        for point in points
-        if 1 <= point <= len(source_ends)
-    ]
-    return decorated_segments, decorated_points, decorated_slides
+    return list(segments), points, list(segment_slides)
 
 
 def fit_segments(segments: list[str], count: int) -> list[str]:
@@ -319,7 +364,7 @@ def split_into_sentence_segments(segments: list[str]) -> tuple[list[str], list[i
 
 def fallback_segments(topic: OutlineTopic) -> list[str]:
     """A plain explanation from the outline, if the LLM can't be reached."""
-    segments = [f"Let's look at {topic['title']}. {topic['summary']}".strip()]
+    segments = [topic["summary"].strip()] if topic["summary"].strip() else []
     segments += [point if point.endswith(".") else point + "." for point in topic["key_points"]]
     return segments
 
@@ -338,11 +383,11 @@ def make_explain_node(llm: LLM):
 
     def explain(state: TeacherState) -> dict:
         if not state["segments"]:
-            segments, points, pace = generate_explanation(llm, state)
+            segments, points, pace, segment_slides = generate_explanation(llm, state)
             segments, points, segment_slides = add_slide_transitions(
                 segments,
                 points,
-                state["outline"][state["current_topic"]]["source_slides"],
+                segment_slides,
             )
             return say_part(
                 segments,
