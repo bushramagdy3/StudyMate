@@ -200,8 +200,8 @@ export function PdfSlideViewer({ fitWidth = false, pdfUrl, slideNumber, topicTit
   if (!pdfUrl) {
     return (
       <div className="pdf-slide-empty">
-        <strong>Your uploaded lecture slide</strong>
-        <span>Slide {slideNumber} preview appears here</span>
+        <strong>Your uploaded study material</strong>
+        <span>The tutor is using this source in the lesson</span>
       </div>
     )
   }

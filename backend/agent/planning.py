@@ -77,7 +77,19 @@ def topic_range(slide_count: int) -> tuple[int, int]:
 
 
 def format_slides(lecture: list[LectureChunk]) -> str:
-    return "\n\n".join(f"Slide {chunk.slide}:\n{chunk.text.strip()}" for chunk in lecture)
+    def label(chunk: LectureChunk) -> str:
+        details = []
+        if chunk.source_name:
+            details.append(chunk.source_name)
+        if chunk.source_page:
+            details.append(f"page {chunk.source_page}")
+        if chunk.start_seconds is not None:
+            end = chunk.end_seconds if chunk.end_seconds is not None else chunk.start_seconds
+            details.append(f"{chunk.start_seconds:.0f}s-{end:.0f}s")
+        suffix = f" ({', '.join(details)})" if details else ""
+        return f"Slide {chunk.slide}{suffix}"
+
+    return "\n\n".join(f"{label(chunk)}:\n{chunk.text.strip()}" for chunk in lecture)
 
 
 def planning_prompt(lecture: list[LectureChunk], slide_count: int) -> str:

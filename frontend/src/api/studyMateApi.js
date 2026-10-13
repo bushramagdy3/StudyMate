@@ -1,7 +1,9 @@
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'
 
 const activeSessionRequests = new Set()
-const SESSION_START_TIMEOUT_MS = 180_000
+// Combined uploads can include PDF analysis, presentation conversion, and
+// video transcription. Keep a finite timeout, but give that one workflow time.
+const SESSION_START_TIMEOUT_MS = 360_000
 const SESSION_EVENT_TIMEOUT_MS = 90_000
 const SESSION_READ_TIMEOUT_MS = 30_000
 const SESSION_DELETE_TIMEOUT_MS = 20_000
@@ -82,15 +84,21 @@ async function readJsonResponse(response) {
   throw error
 }
 
-export async function startSession({ environmentId, pdfFile, signal }) {
+export async function startSession({ environmentId, mediaFiles, pdfFile, signal }) {
   const request = trackedRequest(
     signal,
     SESSION_START_TIMEOUT_MS,
-    'Preparing this session took too long. Please try again with a smaller PDF.',
+    'Preparing this session took too long. Please try again with smaller media files.',
   )
   const formData = new FormData()
   formData.append('environment', environmentId)
-  formData.append('pdf', pdfFile)
+  // Keep the legacy field for older clients while the upload page sends a
+  // combined source set under `media`.
+  if (mediaFiles?.length) {
+    mediaFiles.forEach((file) => formData.append('media', file))
+  } else if (pdfFile) {
+    formData.append('pdf', pdfFile)
+  }
 
   try {
     const response = await fetch(`${apiBaseUrl}/api/sessions`, {

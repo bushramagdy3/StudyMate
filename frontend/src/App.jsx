@@ -45,10 +45,7 @@ function App() {
   const [isAboutOpen, setIsAboutOpen] = useState(false)
   const [isLoadingSession, setIsLoadingSession] = useState(false)
   const [dialog, setDialog] = useState(null)
-  const [pdfName, setPdfName] = useState(
-    () => new URLSearchParams(window.location.search).get('file') || '',
-  )
-  const [pdfFile, setPdfFile] = useState(null)
+  const [mediaFiles, setMediaFiles] = useState([])
   const [pdfUrl, setPdfUrl] = useState('')
   const pdfUrlRef = useRef('')
   const startSessionRequest = useRef(null)
@@ -104,20 +101,21 @@ function App() {
     }
   }
 
-  function changePdfFile(file) {
+  function changeMediaFiles(files) {
     if (pdfUrlRef.current) {
       URL.revokeObjectURL(pdfUrlRef.current)
       pdfUrlRef.current = ''
     }
 
-    if (!file) {
-      setPdfFile(null)
+    // PDF.js previews one source only. Preserve the single-PDF preview without
+    // rendering an unrelated page when a combined session starts.
+    const firstPdf = files.length === 1 && files[0].name.toLowerCase().endsWith('.pdf')
+    if (!firstPdf) {
       setPdfUrl('')
       return
     }
 
-    setPdfFile(file)
-    const nextPdfUrl = URL.createObjectURL(file)
+    const nextPdfUrl = URL.createObjectURL(firstPdf)
     pdfUrlRef.current = nextPdfUrl
     setPdfUrl(nextPdfUrl)
   }
@@ -140,7 +138,7 @@ function App() {
   }
 
   async function openSessionAfterLoading() {
-    if (!environmentExists(environmentId) || !pdfFile) {
+    if (!environmentExists(environmentId) || mediaFiles.length === 0) {
       return
     }
 
@@ -154,7 +152,7 @@ function App() {
     try {
       const response = await startSession({
         environmentId,
-        pdfFile,
+        mediaFiles,
         signal: controller.signal,
       })
 
@@ -179,7 +177,7 @@ function App() {
       setDialog({
         kind: 'start-error',
         title: 'Could not start the session',
-        message: error.message || 'Please check your PDF and try again.',
+        message: error.message || 'Please check your media and try again.',
       })
     }
   }
@@ -253,9 +251,11 @@ function App() {
 
       {displayedPage === 'upload' && (
         <UploadPdfPage
-          onPdfFileChange={changePdfFile}
-          pdfName={pdfName}
-          onPdfNameChange={setPdfName}
+          mediaFiles={mediaFiles}
+          onMediaFilesChange={(files) => {
+            setMediaFiles(files)
+            changeMediaFiles(files)
+          }}
           onBack={() => goToPage('home')}
           onContinue={() => goToPage('choose')}
         />

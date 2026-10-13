@@ -179,3 +179,125 @@ def test_start_session_endpoint_processes_pdf_before_starting_agent(monkeypatch)
     assert captured["filename"] == "lecture.pdf"
     assert captured["request"].environment is Environment.STUDY_ROOM
     assert captured["request"].lecture == [LectureChunk(slide=1, text="HTTP overview")]
+
+
+def test_combined_media_preserves_order_and_source_metadata(monkeypatch):
+    class Upload:
+        def __init__(self, filename, content_type):
+            self.filename = filename
+            self.content_type = content_type
+
+    async def fake_pdf(upload):
+        return [LectureChunk(slide=1, text=f"PDF content from {upload.filename}")]
+
+    async def fake_presentation(upload):
+        return [
+            LectureChunk(slide=1, text=f"PPT page one from {upload.filename}"),
+            LectureChunk(slide=2, text=f"PPT page two from {upload.filename}"),
+        ]
+
+    async def fake_video(upload):
+        return [
+            LectureChunk(
+                slide=1,
+                text="Video transcript segment",
+                source_type="video",
+                start_seconds=12.5,
+                end_seconds=18.0,
+            )
+        ]
+
+    monkeypatch.setattr(main, "process_pdf_upload", fake_pdf)
+    monkeypatch.setattr(main, "process_presentation_upload", fake_presentation)
+    monkeypatch.setattr(main, "process_video_upload", fake_video)
+
+    chunks = asyncio.run(
+        main.process_media_uploads(
+            [
+                Upload("lecture-notes.pdf", "application/pdf"),
+                Upload("slides.pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation"),
+                Upload("recap.mp4", "video/mp4"),
+            ]
+        )
+    )
+
+    assert [(chunk.slide, chunk.source_name, chunk.source_type) for chunk in chunks] == [
+        (1, "lecture-notes.pdf", "pdf"),
+        (2, "slides.pptx", "ppt"),
+        (3, "slides.pptx", "ppt"),
+        (4, "recap.mp4", "video"),
+    ]
+    assert [chunk.source_page for chunk in chunks] == [1, 1, 2, None]
+    assert chunks[-1].start_seconds == 12.5
+    assert chunks[-1].end_seconds == 18.0
+
+
+def test_video_transcription_keeps_whisper_segment_timestamps(monkeypatch):
+    monkeypatch.setenv("GROQ_STT_API_KEY", "test-key")
+
+    def handler(request):
+        assert request.url == httpx.URL(main.GROQ_STT_URL)
+        return httpx.Response(
+            200,
+            json={
+                "segments": [
+                    {"start": 0.0, "end": 3.2, "text": " First idea. "},
+                    {"start": 3.2, "end": 7.8, "text": "Second idea."},
+                ]
+            },
+        )
+
+    chunks = asyncio.run(
+        main.transcribe_video_audio(
+            b"audio",
+            "lesson.mp4",
+            transport=httpx.MockTransport(handler),
+        )
+    )
+
+    assert [(chunk.text, chunk.start_seconds, chunk.end_seconds) for chunk in chunks] == [
+        ("First idea.", 0.0, 3.2),
+        ("Second idea.", 3.2, 7.8),
+    ]
+    assert all(chunk.source_name == "lesson.mp4" for chunk in chunks)
+
+
+def test_start_session_endpoint_accepts_multiple_media_sources(monkeypatch):
+    captured = {}
+
+    async def fake_process_media(media):
+        captured["filenames"] = [upload.filename for upload in media]
+        return [LectureChunk(slide=1, text="Combined lecture")]
+
+    class FakeTeacher:
+        def start_session(self, request):
+            captured["request"] = request
+            return TeacherResponse(
+                session_id="combined-session",
+                speech=["Welcome."],
+                avatar_state=AvatarState.SPEAKING,
+                awaiting=Awaiting.CONTINUE,
+                outline=[Topic(index=0, title="Combined lecture")],
+                current_topic=0,
+                current_slide=1,
+                can_raise_hand=True,
+            )
+
+    monkeypatch.setattr(main, "process_media_uploads", fake_process_media)
+    monkeypatch.setattr(main, "get_teacher", lambda: FakeTeacher())
+
+    client = TestClient(app)
+    response = client.post(
+        "/api/sessions",
+        data={"environment": "private-tutor"},
+        files=[
+            ("media", ("one.pdf", b"%PDF", "application/pdf")),
+            ("media", ("two.pdf", b"%PDF", "application/pdf")),
+            ("media", ("recap.mp4", b"video", "video/mp4")),
+        ],
+    )
+
+    assert response.status_code == 200
+    assert response.json()["session_id"] == "combined-session"
+    assert captured["filenames"] == ["one.pdf", "two.pdf", "recap.mp4"]
+    assert captured["request"].lecture == [LectureChunk(slide=1, text="Combined lecture")]

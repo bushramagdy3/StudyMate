@@ -1,8 +1,12 @@
 import asyncio
 import base64
 import os
+import shutil
+import subprocess
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 import httpx
 from agent.contract import (
@@ -59,6 +63,10 @@ MIN_DRAWINGS = 15  # this many vector shapes usually means a diagram, chart or t
 
 
 class PdfUploadResponse(BaseModel):
+    lecture_chunks: list[LectureChunk]
+
+
+class MediaUploadResponse(BaseModel):
     lecture_chunks: list[LectureChunk]
 
 
@@ -334,16 +342,14 @@ async def pages_to_lecture_chunks(
     ]
 
 
-async def process_pdf_upload(pdf: UploadFile) -> list[LectureChunk]:
-    if pdf.content_type != "application/pdf":
-        raise HTTPException(
-            status_code=400,
-            detail="Upload a PDF file.",
-        )
+def is_pdf_upload(upload: UploadFile) -> bool:
+    return (upload.content_type or "").lower() == "application/pdf" or (
+        upload.filename or ""
+    ).lower().endswith(".pdf")
 
-    pdf_bytes = await pdf.read()
 
-    if len(pdf_bytes) == 0:
+async def process_pdf_bytes(pdf_bytes: bytes) -> list[LectureChunk]:
+    if not pdf_bytes:
         raise HTTPException(
             status_code=400,
             detail="PDF file is empty.",
@@ -351,19 +357,314 @@ async def process_pdf_upload(pdf: UploadFile) -> list[LectureChunk]:
 
     try:
         # Rendering pages is slow CPU work; a thread keeps the server responsive.
-        pages = await asyncio.to_thread(
-            read_pages,
-            pdf_bytes,
-        )
+        pages = await asyncio.to_thread(read_pages, pdf_bytes)
     except Exception:
         raise HTTPException(
             status_code=400,
             detail="Could not read PDF file.",
         )
 
-    return await pages_to_lecture_chunks(
-        pages
+    return await pages_to_lecture_chunks(pages)
+
+
+async def process_pdf_upload(pdf: UploadFile) -> list[LectureChunk]:
+    if not is_pdf_upload(pdf):
+        raise HTTPException(
+            status_code=400,
+            detail="Upload a PDF file.",
+        )
+
+    return await process_pdf_bytes(await pdf.read())
+
+
+PRESENTATION_EXTENSIONS = {".ppt", ".pptx"}
+VIDEO_EXTENSIONS = {".mp4", ".m4v", ".mov", ".mkv", ".webm", ".avi"}
+MAX_MEDIA_BYTES = 500 * 1024 * 1024
+PRESENTATION_TIMEOUT_SECONDS = 120
+VIDEO_TRANSCRIPTION_TIMEOUT_SECONDS = 90.0
+
+
+def file_extension(upload: UploadFile) -> str:
+    return Path(upload.filename or "").suffix.lower()
+
+
+def media_type(upload: UploadFile) -> Literal["pdf", "ppt", "video"]:
+    extension = file_extension(upload)
+    content_type = (upload.content_type or "").lower()
+    if extension == ".pdf" or content_type == "application/pdf":
+        return "pdf"
+    if extension in PRESENTATION_EXTENSIONS or content_type in {
+        "application/vnd.ms-powerpoint",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    }:
+        return "ppt"
+    if extension in VIDEO_EXTENSIONS or content_type.startswith("video/"):
+        return "video"
+    raise HTTPException(
+        status_code=400,
+        detail="Upload PDF, PPT/PPTX, or video files only.",
     )
+
+
+def libreoffice_executable() -> str | None:
+    configured = os.getenv("LIBREOFFICE_PATH")
+    if configured and Path(configured).is_file():
+        return configured
+    return shutil.which("soffice") or shutil.which("libreoffice")
+
+
+def convert_presentation_bytes(presentation: bytes, filename: str) -> bytes:
+    executable = libreoffice_executable()
+    if not executable:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "PPT conversion requires LibreOffice. Install LibreOffice or set "
+                "LIBREOFFICE_PATH to its soffice executable."
+            ),
+        )
+
+    with tempfile.TemporaryDirectory(prefix="studymate-ppt-") as directory:
+        source = Path(directory, Path(filename).name)
+        source.write_bytes(presentation)
+        try:
+            result = subprocess.run(
+                [
+                    executable,
+                    "--headless",
+                    "--convert-to",
+                    "pdf",
+                    "--outdir",
+                    directory,
+                    str(source),
+                ],
+                capture_output=True,
+                check=False,
+                timeout=PRESENTATION_TIMEOUT_SECONDS,
+            )
+        except subprocess.TimeoutExpired as error:
+            raise HTTPException(
+                status_code=504,
+                detail="Presentation conversion took too long. Please try a smaller file.",
+            ) from error
+        converted = source.with_suffix(".pdf")
+        if result.returncode != 0 or not converted.is_file():
+            error = result.stderr.decode("utf-8", "replace").strip()
+            raise HTTPException(
+                status_code=400,
+                detail=f"Could not convert presentation to PDF.{f' {error}' if error else ''}",
+            )
+        return converted.read_bytes()
+
+
+async def process_presentation_upload(presentation: UploadFile) -> list[LectureChunk]:
+    if file_extension(presentation) not in PRESENTATION_EXTENSIONS:
+        raise HTTPException(status_code=400, detail="Upload a PPT or PPTX file.")
+    presentation_bytes = await presentation.read()
+    if not presentation_bytes:
+        raise HTTPException(status_code=400, detail="Presentation file is empty.")
+    if len(presentation_bytes) > MAX_MEDIA_BYTES:
+        raise HTTPException(status_code=413, detail="Presentation is too large. Keep it under 500 MB.")
+    pdf_bytes = await asyncio.to_thread(
+        convert_presentation_bytes,
+        presentation_bytes,
+        presentation.filename or "presentation.pptx",
+    )
+    return await process_pdf_bytes(pdf_bytes)
+
+
+def ffmpeg_executable() -> str:
+    configured = os.getenv("FFMPEG_PATH")
+    if configured and Path(configured).is_file():
+        return configured
+    system_ffmpeg = shutil.which("ffmpeg")
+    if system_ffmpeg:
+        return system_ffmpeg
+    try:
+        import imageio_ffmpeg
+
+        return imageio_ffmpeg.get_ffmpeg_exe()
+    except Exception as error:
+        raise HTTPException(
+            status_code=503,
+            detail="Video processing requires FFmpeg. Install the backend dependencies and try again.",
+        ) from error
+
+
+def extract_video_audio(video_bytes: bytes, filename: str) -> bytes:
+    """Extract compact mono MP3 audio so Whisper receives audio, not a video container."""
+    with tempfile.TemporaryDirectory(prefix="studymate-video-") as directory:
+        source = Path(directory, Path(filename).name)
+        output = Path(directory, "audio.mp3")
+        source.write_bytes(video_bytes)
+        try:
+            result = subprocess.run(
+                [
+                    ffmpeg_executable(),
+                    "-y",
+                    "-i",
+                    str(source),
+                    "-vn",
+                    "-ac",
+                    "1",
+                    "-ar",
+                    "16000",
+                    "-b:a",
+                    "32k",
+                    str(output),
+                ],
+                capture_output=True,
+                check=False,
+                timeout=PRESENTATION_TIMEOUT_SECONDS,
+            )
+        except subprocess.TimeoutExpired as error:
+            raise HTTPException(
+                status_code=504,
+                detail="Video audio extraction took too long. Please try a shorter video.",
+            ) from error
+        if result.returncode != 0 or not output.is_file():
+            raise HTTPException(status_code=400, detail="Could not extract audio from this video.")
+        return output.read_bytes()
+
+
+async def transcribe_video_audio(
+    audio_bytes: bytes,
+    source_name: str,
+    transport: httpx.AsyncBaseTransport | None = None,
+) -> list[LectureChunk]:
+    if not audio_bytes:
+        raise HTTPException(status_code=400, detail="The video has no readable audio track.")
+    if len(audio_bytes) > GROQ_STT_MAX_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail="The extracted video audio is too large. Please upload a shorter video.",
+        )
+
+    try:
+        async with httpx.AsyncClient(
+            timeout=VIDEO_TRANSCRIPTION_TIMEOUT_SECONDS,
+            transport=transport,
+        ) as client:
+            response = await client.post(
+                GROQ_STT_URL,
+                headers={"Authorization": f"Bearer {groq_stt_api_key()}"},
+                data={
+                    "model": GROQ_STT_MODEL,
+                    "response_format": "verbose_json",
+                    "timestamp_granularities[]": "segment",
+                },
+                files={"file": (f"{Path(source_name).stem}.mp3", audio_bytes, "audio/mpeg")},
+            )
+    except httpx.HTTPError as error:
+        raise HTTPException(
+            status_code=502,
+            detail="Video transcription could not be reached. Please try again.",
+        ) from error
+
+    if response.status_code == 429:
+        raise HTTPException(
+            status_code=429,
+            detail="Video transcription is temporarily unavailable. Please try again later.",
+        )
+    if response.status_code != 200:
+        raise HTTPException(status_code=502, detail="Video transcription failed. Please try again.")
+
+    try:
+        payload = response.json()
+    except ValueError as error:
+        raise HTTPException(status_code=502, detail="Video transcription returned an invalid response.") from error
+
+    segments = payload.get("segments") or []
+    chunks = []
+    for segment in segments:
+        text = str(segment.get("text", "")).strip()
+        if not text:
+            continue
+        chunks.append(
+            LectureChunk(
+                slide=len(chunks) + 1,
+                text=text,
+                source_name=source_name,
+                source_type="video",
+                start_seconds=float(segment.get("start", 0)),
+                end_seconds=float(segment.get("end", segment.get("start", 0))),
+            )
+        )
+    if chunks:
+        return chunks
+
+    transcript = str(payload.get("text", "")).strip()
+    if not transcript:
+        raise HTTPException(status_code=502, detail="Video transcription returned no text.")
+    return [
+        LectureChunk(
+            slide=1,
+            text=transcript,
+            source_name=source_name,
+            source_type="video",
+            start_seconds=0,
+        )
+    ]
+
+
+async def process_video_upload(video: UploadFile) -> list[LectureChunk]:
+    video_bytes = await video.read()
+    if not video_bytes:
+        raise HTTPException(status_code=400, detail="Video file is empty.")
+    if len(video_bytes) > MAX_MEDIA_BYTES:
+        raise HTTPException(status_code=413, detail="Video is too large. Keep it under 500 MB.")
+    audio_bytes = await asyncio.to_thread(
+        extract_video_audio,
+        video_bytes,
+        video.filename or "video.mp4",
+    )
+    return await transcribe_video_audio(audio_bytes, video.filename or "video")
+
+
+def annotate_source_chunks(
+    chunks: list[LectureChunk],
+    source_name: str,
+    source_type: Literal["pdf", "ppt", "video"],
+    first_slide: int,
+) -> list[LectureChunk]:
+    """Give each source chunk a globally unique slide id while retaining its origin."""
+    annotated = []
+    for offset, chunk in enumerate(chunks):
+        annotated.append(
+            LectureChunk(
+                slide=first_slide + offset,
+                text=chunk.text,
+                source_name=source_name,
+                source_type=source_type,
+                source_page=chunk.slide if source_type != "video" else None,
+                start_seconds=chunk.start_seconds,
+                end_seconds=chunk.end_seconds,
+            )
+        )
+    return annotated
+
+
+async def process_media_uploads(media: list[UploadFile]) -> list[LectureChunk]:
+    if not media:
+        raise HTTPException(status_code=400, detail="Upload at least one media file.")
+
+    lecture = []
+    next_slide = 1
+    for upload in media:
+        kind = media_type(upload)
+        if kind == "pdf":
+            chunks = await process_pdf_upload(upload)
+        elif kind == "ppt":
+            chunks = await process_presentation_upload(upload)
+        else:
+            chunks = await process_video_upload(upload)
+        annotated = annotate_source_chunks(chunks, upload.filename or "Untitled source", kind, next_slide)
+        lecture.extend(annotated)
+        next_slide += len(annotated)
+
+    if not lecture:
+        raise HTTPException(status_code=400, detail="No learning content could be extracted from the uploaded media.")
+    return lecture
 
 
 # ---------------------------------------------------------
@@ -568,7 +869,7 @@ def main():
     return {"message": "hello world"}
 
 
-@app.post("/api/upload-pdf")
+@app.post("/api/upload-pdf", response_model=PdfUploadResponse, response_model_exclude_none=True)
 async def upload_pdf(
     pdf: UploadFile = File(...)
 ):
@@ -577,15 +878,32 @@ async def upload_pdf(
     )
 
 
+@app.post("/api/upload-media", response_model=MediaUploadResponse, response_model_exclude_none=True)
+async def upload_media(media: list[UploadFile] = File(...)):
+    """Preview extraction for a combined media upload without starting a session."""
+    return MediaUploadResponse(lecture_chunks=await process_media_uploads(media))
+
+
 @app.post("/api/sessions", response_model=TeacherResponse)
 async def start_session(
-    pdf: UploadFile = File(...),
+    media: list[UploadFile] | None = File(None),
+    pdf: UploadFile | None = File(None),
     environment: str | None = Form(None),
     enviroment: str | None = Form(None),
 ):
+    # Keep the old single-PDF field working for existing clients while the new
+    # upload page sends one or more files under `media`.
+    if media:
+        lecture = await process_media_uploads(media)
+    elif pdf:
+        lecture = await process_pdf_upload(pdf)
+    else:
+        lecture = None
+    if lecture is None:
+        raise HTTPException(status_code=422, detail="Upload at least one PDF, PPT/PPTX, or video file.")
     request = StartSessionRequest(
         environment=parse_environment(environment or enviroment),
-        lecture=await process_pdf_upload(pdf),
+        lecture=lecture,
     )
 
     try:

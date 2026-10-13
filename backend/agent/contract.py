@@ -35,10 +35,17 @@ class Environment(str, Enum):
 
 
 class LectureChunk(_Model):
-    """The extracted text of one slide or page of the lecture PDF."""
+    """One ordered piece of teaching material from an uploaded source."""
 
     slide: int = Field(ge=1)
     text: str
+    # `slide` stays globally unique for the existing agent and slide-transition
+    # flow. These fields retain where that material came from in a combined upload.
+    source_name: str | None = None
+    source_type: Literal["pdf", "ppt", "video"] | None = None
+    source_page: int | None = Field(default=None, ge=1)
+    start_seconds: float | None = Field(default=None, ge=0)
+    end_seconds: float | None = Field(default=None, ge=0)
 
 
 class StartSessionRequest(_Model):

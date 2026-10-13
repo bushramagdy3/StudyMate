@@ -3,7 +3,7 @@ import loadingDots from '../assets/loading/loading-dots.gif'
 import { useEffect, useState } from 'react'
 
 const loadingStages = [
-  'Reading your PDF and preparing each slide…',
+  'Reading your media and preparing each source…',
   'Reviewing diagrams, equations, and visual content…',
   'Organizing the lecture topics…',
   'Setting up Regina for your study session…',

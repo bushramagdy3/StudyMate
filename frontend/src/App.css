@@ -433,13 +433,24 @@ button {
 
 .upload-content {
   align-items: center;
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  gap: clamp(15px, 1.8vw, 34px);
-  left: 0;
-  position: absolute;
-  right: 0;
-  top: 21.7%;
+  gap: clamp(16px, 1.4vw, 26px);
+  margin: 0 auto;
+  min-height: 100vh;
+  padding: calc(clamp(78px, 5.4vw, 112px) + clamp(28px, 3vw, 52px)) 18px 42px;
+  position: relative;
+  width: min(100%, 760px);
+}
+
+.screen.upload-page {
+  aspect-ratio: auto;
+  background-attachment: fixed;
+  background-size: cover;
+  min-height: 100vh;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .upload-heading {
@@ -457,26 +468,37 @@ button {
 
 .upload-panel {
   animation: panel-pop 340ms steps(7, end) both;
-  background-position: center;
-  background-repeat: no-repeat;
-  background-size: 100% 100%;
-  aspect-ratio: 660 / 440;
-  height: auto;
-  position: relative;
+  background: rgba(39, 25, 21, 0.94);
+  border: 3px solid #a8684c;
+  border-radius: 14px;
+  box-sizing: border-box;
+  box-shadow:
+    0 0 0 3px #1a100e,
+    inset 0 0 0 2px #603a2d;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
   transform-origin: center;
-  width: 39.5%;
+  width: 100%;
 }
 
 .drop-zone {
-  background: none;
-  border: 0;
+  align-items: center;
+  background: rgba(35, 22, 19, 0.48);
+  border: 3px dashed #7e5945;
+  border-radius: 12px;
+  box-sizing: border-box;
   cursor: pointer;
-  height: 57.2%;
-  left: 4.2%;
-  padding: 0;
-  position: absolute;
-  top: 6.6%;
-  width: 91.6%;
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 auto;
+  gap: 8px;
+  justify-content: center;
+  min-height: 150px;
+  padding: 14px 18px;
+  position: relative;
+  width: 100%;
 }
 
 .drop-zone:not(:disabled) {
@@ -484,27 +506,40 @@ button {
   transform-origin: center;
 }
 
-.drop-zone.disabled {
-  cursor: not-allowed;
+.upload-panel--empty .drop-zone {
+  min-height: 208px;
 }
 
-.drop-zone img {
+.upload-panel--filled .drop-zone {
+  flex-direction: row;
+  gap: 18px;
+  min-height: 150px;
+}
+
+.upload-media-icon {
   display: block;
-  height: 100%;
+  height: 50%;
   image-rendering: pixelated;
-  object-fit: fill;
-  width: 100%;
+  object-fit: contain;
+  width: 42%;
+}
+
+.upload-panel--empty .upload-media-icon {
+  height: 112px;
+  width: 180px;
+}
+
+.upload-panel--filled .upload-media-icon {
+  flex: 0 0 156px;
+  height: 112px;
+  width: 156px;
 }
 
 .drop-zone-copy {
-  bottom: 7.5%;
   color: var(--cream);
   display: flex;
   flex-direction: column;
-  left: 0;
   line-height: 1.1;
-  position: absolute;
-  right: 0;
   text-align: center;
   text-shadow: 3px 3px 0 #000;
 }
@@ -525,13 +560,13 @@ button {
   background-repeat: no-repeat;
   background-size: 100% 100%;
   border: 0;
+  box-sizing: border-box;
   display: flex;
-  height: 13.5%;
-  left: 4.2%;
+  flex: 0 0 64px;
+  height: 64px;
   padding: 0 9% 0 11.5%;
-  position: absolute;
-  top: 67.3%;
-  width: 91.6%;
+  position: relative;
+  width: 100%;
 }
 
 .selected-file-icon {
@@ -545,11 +580,43 @@ button {
 }
 
 .selected-file-name {
-  flex: 1;
+  display: block;
   font-size: clamp(16px, 1.35vw, 22px);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.selected-file-copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.selected-file-copy small {
+  color: var(--muted);
+  display: block;
+  font-size: clamp(11px, 0.82vw, 14px);
+  margin-top: 3px;
+}
+
+.selected-file-list {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: min(39vh, 300px);
+  overflow-y: auto;
+  padding: 1px 7px 1px 1px;
+  width: 100%;
+}
+
+.selected-file-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.selected-file-list::-webkit-scrollbar-thumb {
+  background: #cf8057;
+  border: 2px solid #1b100e;
 }
 
 .selected-file button {
@@ -579,14 +646,91 @@ button {
 
 .upload-note {
   color: var(--muted);
-  bottom: 4.4%;
   font-size: clamp(14px, 1.18vw, 20px);
-  left: 11%;
   line-height: 1.3;
-  margin: 0;
-  position: absolute;
-  right: 11%;
+  margin: 2px auto 0;
+  max-width: 560px;
   text-align: center;
+}
+
+.media-picker-popup {
+  aspect-ratio: auto;
+  height: min(66vh, 520px);
+  max-height: none;
+  width: min(48vw, 750px);
+}
+
+.media-picker-content {
+  gap: 16px;
+  padding: 9% 9% 8%;
+}
+
+.media-picker-content h2 {
+  font-size: clamp(34px, 2.55vw, 46px);
+  margin: 0;
+}
+
+.media-picker-content p {
+  font-size: clamp(18px, 1.45vw, 25px);
+  line-height: 1.3;
+}
+
+.media-picker-actions {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  width: 100%;
+}
+
+.media-picker-actions button {
+  align-items: center;
+  background: #3d2520;
+  border: 3px dashed #c78962;
+  border-radius: 10px;
+  box-shadow: inset 0 0 0 2px #1a100e, 0 0 0 1px #3a221c;
+  color: var(--cream);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  font-family: var(--pixel-font);
+  font-size: clamp(17px, 1.35vw, 23px);
+  line-height: 1.25;
+  justify-content: center;
+  min-height: 198px;
+  padding: 12px 8px 14px;
+  text-shadow: 2px 2px 0 #000;
+}
+
+.media-picker-actions button:hover {
+  background: #5d3328;
+  border-color: #f2a36e;
+}
+
+.media-picker-icon {
+  display: block;
+  height: 104px;
+  margin-bottom: 6px;
+  overflow: hidden;
+  width: 138px;
+}
+
+.media-picker-icon img {
+  height: 100%;
+  image-rendering: pixelated;
+  object-fit: contain;
+  transform: scale(1.72);
+  width: 100%;
+}
+
+.media-picker-actions button span {
+  display: block;
+}
+
+.media-picker-actions button small {
+  color: #d5b5a1;
+  display: block;
+  font-size: clamp(12px, 0.92vw, 16px);
+  margin-top: 7px;
 }
 
 .upload-note.error {
@@ -598,7 +742,8 @@ button {
   display: flex;
   gap: 4.7%;
   position: relative;
-  width: 36.8%;
+  margin: 0 auto;
+  width: min(100%, 460px);
 }
 
 .flow-actions .asset-button {
@@ -2317,6 +2462,16 @@ button {
 }
 
 @media (max-width: 720px) {
+  .media-picker-popup {
+    aspect-ratio: auto;
+    height: min(82vh, 660px);
+    width: min(92vw, 570px);
+  }
+
+  .media-picker-actions {
+    grid-template-columns: 1fr;
+  }
+
   .quiz-popup {
     height: min(82vh, 680px);
     width: min(92vw, 620px);
