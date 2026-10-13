@@ -19,8 +19,8 @@ function safelyCall(resource, method) {
   }
 }
 
-// fitWidth: the page fills the screen's width and scrolls down, instead of
-// shrinking until the whole page fits (unreadable for a tall A4 page on a small screen).
+// fitWidth: the page fills the screen on both axes as far as its aspect ratio
+// allows. Any remaining dimension scrolls instead of leaving empty screen space.
 export function PdfSlideViewer({ fitWidth = false, pdfUrl, slideNumber, topicTitle, onError }) {
   const hostRef = useRef(null)
   const canvasRef = useRef(null)
@@ -121,7 +121,10 @@ export function PdfSlideViewer({ fitWidth = false, pdfUrl, slideNumber, topicTit
         const availableWidth = Math.max(host.clientWidth, 1)
         const availableHeight = Math.max(host.clientHeight, 1)
         const scale = fitWidth
-          ? availableWidth / baseViewport.width
+          ? Math.max(
+              availableWidth / baseViewport.width,
+              availableHeight / baseViewport.height,
+            )
           : Math.min(
               availableWidth / baseViewport.width,
               availableHeight / baseViewport.height,
@@ -152,10 +155,11 @@ export function PdfSlideViewer({ fitWidth = false, pdfUrl, slideNumber, topicTit
           setStatus('ready')
         }
 
-        // A new slide starts at its top.
+        // A new slide starts at its top-left corner.
         if (fitWidth && host.dataset.page !== String(pageNumber)) {
           host.dataset.page = String(pageNumber)
           host.scrollTop = 0
+          host.scrollLeft = 0
         }
       } catch (error) {
         if (

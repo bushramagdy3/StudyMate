@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
+  getSessionDefaultSourcePdfUrl,
   getSessionSourcePdfUrl,
   sendSessionEvent,
   startQuiz,
@@ -122,12 +123,10 @@ export function SessionPage({
     teacherResponse.current_source?.source_index ??
     fallbackSourceIndex
   const viewerPdfUrl =
-    displayedSource?.source_type === 'video'
-      ? ''
-      : sourceViewerUrls[viewerSourceIndex] ||
-        (Number.isInteger(viewerSourceIndex)
-          ? getSessionSourcePdfUrl(teacherResponse.session_id, viewerSourceIndex)
-          : '')
+    sourceViewerUrls[viewerSourceIndex] ||
+    (Number.isInteger(viewerSourceIndex)
+      ? getSessionSourcePdfUrl(teacherResponse.session_id, viewerSourceIndex)
+      : getSessionDefaultSourcePdfUrl(teacherResponse.session_id))
   const introIsPlaying =
     teacherResponse.current_topic === null &&
     teacherResponse.awaiting === 'continue'
@@ -268,11 +267,13 @@ export function SessionPage({
           playingSegment.current = index
           const nextSlide = teacherResponse.speech_slides?.[index]
           const nextSource = teacherResponse.speech_sources?.[index]
-          if (nextSource) {
+          // Video transcript chunks have no page to render. Keep the most
+          // recent visual document on screen while Regina explains them.
+          if (nextSource && nextSource.source_type !== 'video') {
             setDisplayedSource(nextSource)
             setDisplayedSlide(nextSource.source_page || nextSource.slide)
           }
-          if (nextSlide) {
+          if (nextSlide && nextSource?.source_type !== 'video') {
             setDisplayedSlide(nextSource?.source_page || nextSlide)
           }
           setSubtitle(text)

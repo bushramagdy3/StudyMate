@@ -1821,15 +1821,14 @@ button {
   max-width: 100%;
 }
 
-/* Fit to width (private tutor): the page fills the laptop screen's width and
-   scrolls vertically. Auto margins centre a short (landscape) page but never
-   push a tall one out of reach. */
+/* Fill the slide screen. A portrait page scrolls vertically; a landscape page
+   scrolls horizontally rather than leaving unused white space. */
 .pdf-slide-canvas-wrap.fit-width {
+  align-items: flex-start;
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
-  overflow-x: hidden;
-  overflow-y: auto;
+  overflow: auto;
   overscroll-behavior: contain;
   scrollbar-color: #cf8d65 #271815;
   scrollbar-gutter: stable;
@@ -1838,11 +1837,13 @@ button {
 
 .pdf-slide-canvas-wrap.fit-width .pdf-slide-canvas {
   flex: 0 0 auto;
-  margin: auto 0;
+  margin: 0;
   max-height: none;
+  max-width: none;
 }
 
 .pdf-slide-canvas-wrap.fit-width::-webkit-scrollbar {
+  height: 8px;
   width: 8px;
 }
 

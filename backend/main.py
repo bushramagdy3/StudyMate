@@ -1080,15 +1080,17 @@ def get_session(session_id: str):
         raise session_not_found(session_id)
 
 
-@app.get("/api/sessions/{session_id}/sources/{source_index}.pdf")
-def get_session_source_pdf(session_id: str, source_index: int):
-    """Serve one visual source as a PDF for the in-session page viewer."""
+def session_source_pdf(session_id: str, source_index: int | None = None) -> Response:
+    """Serve one visual source, or the first available source, as a PDF."""
     try:
         get_teacher().get_session(session_id)
     except SessionNotFound:
         raise session_not_found(session_id)
 
-    source = session_viewer_sources.get(session_id, {}).get(source_index)
+    sources = session_viewer_sources.get(session_id, {})
+    if source_index is None and sources:
+        source_index = min(sources)
+    source = sources.get(source_index)
     if source is None:
         raise HTTPException(status_code=404, detail="That source has no viewable PDF pages.")
     return Response(
@@ -1096,6 +1098,18 @@ def get_session_source_pdf(session_id: str, source_index: int):
         media_type="application/pdf",
         headers={"Content-Disposition": "inline"},
     )
+
+
+@app.get("/api/sessions/{session_id}/sources/default.pdf")
+def get_default_session_source_pdf(session_id: str):
+    """Provide a stable visual fallback when a response has no source reference."""
+    return session_source_pdf(session_id)
+
+
+@app.get("/api/sessions/{session_id}/sources/{source_index}.pdf")
+def get_session_source_pdf(session_id: str, source_index: int):
+    """Serve one exact visual source for the in-session page viewer."""
+    return session_source_pdf(session_id, source_index)
 
 
 @app.post("/api/sessions/{session_id}/transcribe")

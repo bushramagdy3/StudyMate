@@ -4,6 +4,10 @@ export function getSessionSourcePdfUrl(sessionId, sourceIndex) {
   return `${apiBaseUrl}/api/sessions/${sessionId}/sources/${sourceIndex}.pdf`
 }
 
+export function getSessionDefaultSourcePdfUrl(sessionId) {
+  return `${apiBaseUrl}/api/sessions/${sessionId}/sources/default.pdf`
+}
+
 const activeSessionRequests = new Set()
 // Combined uploads can include PDF analysis, presentation conversion, and
 // video transcription. Keep a finite timeout, but give that one workflow time.

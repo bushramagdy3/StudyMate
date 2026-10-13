@@ -361,6 +361,21 @@ def test_session_source_endpoint_serves_cached_pdf(monkeypatch):
     main.session_viewer_sources.pop("source-session", None)
 
 
+def test_default_session_source_endpoint_uses_the_first_cached_visual_file(monkeypatch):
+    class FakeTeacher:
+        def get_session(self, _session_id):
+            return object()
+
+    monkeypatch.setattr(main, "get_teacher", lambda: FakeTeacher())
+    main.session_viewer_sources["default-source-session"] = {3: b"%PDF-later", 1: b"%PDF-first"}
+
+    response = TestClient(app).get("/api/sessions/default-source-session/sources/default.pdf")
+
+    assert response.status_code == 200
+    assert response.content == b"%PDF-first"
+    main.session_viewer_sources.pop("default-source-session", None)
+
+
 def test_presentation_uses_powerpoint_when_libreoffice_is_unavailable(monkeypatch):
     monkeypatch.setattr(main, "libreoffice_executable", lambda: None)
     monkeypatch.setattr(main, "powerpoint_executable", lambda: "POWERPNT.EXE")

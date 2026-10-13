@@ -92,6 +92,35 @@ def test_state_survives_the_checkpointer(caplog):
     assert "unregistered type" not in caplog.text
 
 
+def test_source_metadata_survives_the_checkpointer():
+    request = StartSessionRequest(
+        environment=Environment.STUDY_ROOM,
+        lecture=[
+            LectureChunk(
+                slide=1,
+                text="A presentation page",
+                source_name="lecture.pptx",
+                source_index=1,
+                source_type="ppt",
+                source_page=4,
+            )
+        ],
+    )
+
+    graph = StateGraph(TeacherState)
+    graph.add_node("plan", lambda _state: {})
+    graph.add_edge(START, "plan")
+    graph.add_edge("plan", END)
+    app = graph.compile(checkpointer=make_checkpointer())
+    config = {"configurable": {"thread_id": "sources"}}
+    app.invoke(initial_state("sources", request), config)
+
+    response = to_response(app.get_state(config).values)
+    assert response.current_source.source_name == "lecture.pptx"
+    assert response.current_source.source_page == 4
+    assert response.visual_source_indexes == [1]
+
+
 def test_summary_is_available_only_for_the_tutor():
     tutor = initial_state("abc", REQUEST) | {"outline": [TOPIC], "current_topic": 0}
     assert to_response(tutor).summary_available
