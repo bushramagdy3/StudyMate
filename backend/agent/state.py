@@ -220,6 +220,13 @@ def to_response(state: TeacherState) -> TeacherResponse:
     speech_sources = [
         source for slide in speech_slides if (source := source_reference(slide)) is not None
     ]
+    visual_source_indexes = sorted(
+        {
+            chunk.source_index
+            for chunk in state["lecture"]
+            if chunk.source_index is not None and chunk.source_type in {"pdf", "ppt"}
+        }
+    )
 
     return TeacherResponse(
         session_id=state["session_id"],
@@ -237,6 +244,7 @@ def to_response(state: TeacherState) -> TeacherResponse:
         current_topic=state["current_topic"],
         current_slide=state["current_slide"],
         current_source=source_reference(state["current_slide"]),
+        visual_source_indexes=visual_source_indexes,
         completed_topics=state["completed_topics"],
         started_topics=started_topics,
         can_raise_hand=state["mode"] == Mode.EXPLAINING,

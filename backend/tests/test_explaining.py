@@ -275,6 +275,7 @@ def test_response_keeps_the_uploaded_source_for_each_spoken_segment():
         ("charts.pptx", 3),
     ]
     assert response.current_source.source_index == 1
+    assert response.visual_source_indexes == [0, 1]
 
 
 def test_explanation_switches_to_the_presentation_source_when_its_segment_uses_it():

@@ -207,6 +207,10 @@ class TeacherResponse(_Model):
     current_topic: int | None = None  # None before planning or after the end
     current_slide: int | None = None  # The PDF slide/page currently being explained
     current_source: SourceReference | None = None
+    # PDF and PowerPoint uploads that the session viewer can render. This is
+    # returned on every turn so the frontend can recover its viewer URL even
+    # after a response replaces the current source.
+    visual_source_indexes: list[int] = Field(default_factory=list)
     completed_topics: list[int] = Field(default_factory=list)
     started_topics: list[int] = Field(default_factory=list)
     # Only true while the teacher is explaining: show the raise-hand button then.

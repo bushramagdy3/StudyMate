@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
+  getSessionSourcePdfUrl,
   sendSessionEvent,
   startQuiz,
   submitQuiz,
@@ -113,6 +114,20 @@ export function SessionPage({
     (topic) => topic.index === teacherResponse.current_topic,
   )
   const currentSlide = displayedSlide
+  const fallbackSourceIndex = teacherResponse.visual_source_indexes?.[0] ?? Object.keys(sourceViewerUrls)
+    .map(Number)
+    .find((sourceIndex) => Number.isInteger(sourceIndex))
+  const viewerSourceIndex =
+    displayedSource?.source_index ??
+    teacherResponse.current_source?.source_index ??
+    fallbackSourceIndex
+  const viewerPdfUrl =
+    displayedSource?.source_type === 'video'
+      ? ''
+      : sourceViewerUrls[viewerSourceIndex] ||
+        (Number.isInteger(viewerSourceIndex)
+          ? getSessionSourcePdfUrl(teacherResponse.session_id, viewerSourceIndex)
+          : '')
   const introIsPlaying =
     teacherResponse.current_topic === null &&
     teacherResponse.awaiting === 'continue'
@@ -543,10 +558,10 @@ export function SessionPage({
           data-pdf-slide-slot
         >
           <PdfSlideViewer
-            key={displayedSource?.source_index ?? 'no-viewable-source'}
+            key={viewerSourceIndex ?? 'no-viewable-source'}
             // Fill the screen's width and scroll down the page, so a tall A4 page stays readable.
             fitWidth
-            pdfUrl={sourceViewerUrls[displayedSource?.source_index] || ''}
+            pdfUrl={viewerPdfUrl}
             slideNumber={currentSlide}
             topicTitle={currentTopic?.title}
             onError={onError}
