@@ -1861,6 +1861,63 @@ button {
   outline-offset: -3px;
 }
 
+.pdf-slide-fit-toggle {
+  align-items: center;
+  background: rgba(39, 24, 21, 0.92);
+  border: 2px solid #f0aa78;
+  box-shadow: 2px 2px 0 #110c0b;
+  color: #fff1d6;
+  cursor: pointer;
+  display: flex;
+  height: clamp(27px, 2vw, 35px);
+  justify-content: center;
+  padding: 0;
+  position: absolute;
+  right: clamp(6px, 0.7vw, 11px);
+  top: clamp(6px, 0.7vw, 11px);
+  transition: background-color 120ms steps(2, end), color 120ms steps(2, end);
+  width: clamp(27px, 2vw, 35px);
+  z-index: 5;
+}
+
+.pdf-slide-fit-toggle:hover,
+.pdf-slide-fit-toggle[aria-pressed='true'] {
+  background: #f0aa78;
+  color: #271815;
+}
+
+.pdf-slide-fit-toggle:focus-visible {
+  outline: 2px solid #fff1d6;
+  outline-offset: 2px;
+}
+
+.pdf-slide-fit-icon {
+  border: 2px solid currentColor;
+  display: block;
+  height: 45%;
+  position: relative;
+  width: 45%;
+}
+
+.pdf-slide-fit-icon::before,
+.pdf-slide-fit-icon::after {
+  background: currentColor;
+  content: '';
+  height: 2px;
+  position: absolute;
+  width: 5px;
+}
+
+.pdf-slide-fit-icon::before {
+  left: -2px;
+  top: -2px;
+}
+
+.pdf-slide-fit-icon::after {
+  bottom: -2px;
+  right: -2px;
+}
+
 .pdf-slide-loading,
 .pdf-slide-error {
   align-items: center;

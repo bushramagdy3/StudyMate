@@ -26,6 +26,8 @@ export function PdfSlideViewer({ fitWidth = false, pdfUrl, slideNumber, topicTit
   const canvasRef = useRef(null)
   const [pdfDocument, setPdfDocument] = useState(null)
   const [status, setStatus] = useState(pdfUrl ? 'loading' : 'empty')
+  const [showFullPage, setShowFullPage] = useState(false)
+  const fillSlideArea = fitWidth && !showFullPage
 
   useEffect(() => {
     if (!pdfUrl) {
@@ -120,7 +122,7 @@ export function PdfSlideViewer({ fitWidth = false, pdfUrl, slideNumber, topicTit
         const baseViewport = page.getViewport({ scale: 1 })
         const availableWidth = Math.max(host.clientWidth, 1)
         const availableHeight = Math.max(host.clientHeight, 1)
-        const scale = fitWidth
+        const scale = fillSlideArea
           ? Math.max(
               availableWidth / baseViewport.width,
               availableHeight / baseViewport.height,
@@ -156,7 +158,7 @@ export function PdfSlideViewer({ fitWidth = false, pdfUrl, slideNumber, topicTit
         }
 
         // A new slide starts at its top-left corner.
-        if (fitWidth && host.dataset.page !== String(pageNumber)) {
+        if (fillSlideArea && host.dataset.page !== String(pageNumber)) {
           host.dataset.page = String(pageNumber)
           host.scrollTop = 0
           host.scrollLeft = 0
@@ -199,7 +201,7 @@ export function PdfSlideViewer({ fitWidth = false, pdfUrl, slideNumber, topicTit
       safelyCall(renderTask, 'cancel')
       safelyCall(renderedPage, 'cleanup')
     }
-  }, [fitWidth, onError, pdfDocument, slideNumber])
+  }, [fillSlideArea, onError, pdfDocument, slideNumber])
 
   if (!pdfUrl) {
     return (
@@ -215,14 +217,31 @@ export function PdfSlideViewer({ fitWidth = false, pdfUrl, slideNumber, topicTit
 
   return (
     <div
-      className={fitWidth ? 'pdf-slide-canvas-wrap fit-width' : 'pdf-slide-canvas-wrap'}
+      className={
+        fillSlideArea
+          ? 'pdf-slide-canvas-wrap fit-width'
+          : 'pdf-slide-canvas-wrap'
+      }
       ref={hostRef}
       // Scrollable with the keyboard too.
-      tabIndex={fitWidth ? 0 : undefined}
+      tabIndex={fillSlideArea ? 0 : undefined}
       role="img"
       aria-label={`Slide ${slideNumber}${topicTitle ? `: ${topicTitle}` : ''}`}
     >
       <canvas className="pdf-slide-canvas" ref={canvasRef} />
+
+      {fitWidth && (
+        <button
+          aria-label={showFullPage ? 'Fill the slide area' : 'Show the full slide'}
+          aria-pressed={showFullPage}
+          className="pdf-slide-fit-toggle"
+          onClick={() => setShowFullPage((isFullPage) => !isFullPage)}
+          title={showFullPage ? 'Fill slide area' : 'Show full slide'}
+          type="button"
+        >
+          <span aria-hidden="true" className="pdf-slide-fit-icon" />
+        </button>
+      )}
 
       {status === 'loading' && (
         <div className="pdf-slide-loading" role="status">
