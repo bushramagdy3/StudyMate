@@ -13,7 +13,7 @@ export function HomePage({ onAbout, onStart }) {
           <h1 id="home-title" className="visually-hidden">
             StudyMate
           </h1>
-          <p>Turn lecture slides into an interactive study session.</p>
+          <p>Combine lecture PDFs, PowerPoints, and videos into one study session.</p>
         </section>
 
         <div className="home-actions">

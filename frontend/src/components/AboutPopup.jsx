@@ -19,9 +19,9 @@ export function AboutPopup({ onClose }) {
         <div className="about-popup-content">
           <h2 id="about-popup-title">About StudyMate</h2>
           <p>
-            StudyMate turns your lecture PDFs into interactive AI study sessions.
-            Choose your setting, follow the explanation, ask questions, and revisit
-            topics at your own pace.
+            StudyMate combines your lecture PDFs, PowerPoints, and videos into one
+            interactive AI study session. Choose your setting, follow the explanation,
+            ask questions, and revisit topics at your own pace.
           </p>
 
           <button
