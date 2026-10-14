@@ -42,7 +42,7 @@ origins = [
     "http://127.0.0.1:5173",
     *[
         origin.strip()
-        for origin in os.getenv("COR_ORIGINS", "").split(",")
+        for origin in os.getenv("CORS_ORIGINS", "").split(",")
         if origin.strip()
     ],
 ]

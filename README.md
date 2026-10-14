@@ -48,6 +48,10 @@ The long-term goal is a learning companion that can connect lectures, practice, 
 
 *Click a screenshot to view it at full size.*
 
+## Demo Video
+
+> **Demo video placeholder:** Add the public demo video link here before submission.
+
 ## Architecture Overview
 
 The React frontend renders the session and sends user actions to FastAPI. The backend normalizes all uploaded media into `LectureChunk` records, then LangGraph uses one session-specific `TeacherState` to control planning, teaching, questions, progress, and recovery after an interruption.
@@ -210,6 +214,13 @@ The first quiz uses topics where the student struggled during teaching. New quiz
 - **AI teaching and planning:** Featherless AI
 - **Tutor speech:** Fish Audio
 
+## Deployment
+
+- **Frontend:** Deployed with Vercel
+- **Backend API:** Deployed with Render
+
+For a deployed frontend, set `VITE_API_BASE_URL` to the public Render API URL so the Vercel app sends session, transcription, and quiz requests to the backend.
+
 ## What's Next
 
 StudyMate currently creates one source-aware learning session from a student's uploaded PDFs, PowerPoints, and lecture videos. The next step is to make that support continuous across an entire course.
@@ -294,17 +305,9 @@ The frontend uses `http://127.0.0.1:8000` by default. To use a different backend
 VITE_API_BASE_URL=http://127.0.0.1:8000
 ```
 
-### 4. Verify the project
+### API Notes
 
-In separate terminals:
-
-```bash
-# Backend, from backend/
-python -m pytest -q
-```
-
-```bash
-# Frontend, from frontend/
-npm run lint
-npm run build
-```
+- **Featherless AI** is required for visual slide interpretation, lesson planning, teaching, question generation, and written-answer grading.
+- **Fish Audio** is required for Regina's generated speech.
+- **Groq Whisper** is required for video transcription and optional microphone input. Students can still type answers and questions when voice input is unavailable.
+- **LibreOffice** is recommended for faithful presentation conversion. Legacy `.ppt` files require LibreOffice or PowerPoint; `.pptx` files have a text-only fallback.
