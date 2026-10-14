@@ -50,7 +50,7 @@ The long-term goal is a learning companion that can connect lectures, practice, 
 
 ## Demo Video
 
-> **Demo video placeholder:** Add the public demo video link here before submission.
+https://youtu.be/hD6jDxHqO9k
 
 ## Architecture Overview
 
@@ -308,4 +308,3 @@ VITE_API_BASE_URL=http://127.0.0.1:8000
 - **Featherless AI** is required for visual slide interpretation, lesson planning, teaching, question generation, and written-answer grading.
 - **Fish Audio** is required for Regina's generated speech.
 - **Groq Whisper** is required for video transcription and optional microphone input. Students can still type answers and questions when voice input is unavailable.
-- **LibreOffice** is recommended for faithful presentation conversion. Legacy `.ppt` files require LibreOffice or PowerPoint; `.pptx` files have a text-only fallback.
