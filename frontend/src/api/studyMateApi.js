@@ -1,4 +1,5 @@
-const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'
+const rawApiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'
+const apiBaseUrl = rawApiBaseUrl.replace(/\/+$/, '')
 
 export function getSessionSourcePdfUrl(sessionId, sourceIndex) {
   return `${apiBaseUrl}/api/sessions/${sessionId}/sources/${sourceIndex}.pdf`

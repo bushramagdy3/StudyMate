@@ -219,8 +219,6 @@ The first quiz uses topics where the student struggled during teaching. New quiz
 - **Frontend:** Deployed with Vercel
 - **Backend API:** Deployed with Render
 
-For a deployed frontend, set `VITE_API_BASE_URL` to the public Render API URL so the Vercel app sends session, transcription, and quiz requests to the backend.
-
 ## What's Next
 
 StudyMate currently creates one source-aware learning session from a student's uploaded PDFs, PowerPoints, and lecture videos. The next step is to make that support continuous across an entire course.
