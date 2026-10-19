@@ -4,6 +4,8 @@
 
 StudyMate is a multimodal learning experience that turns a student's own course material into a guided lesson. Regina explains source-grounded ideas, synchronizes the relevant PDF or PowerPoint page, answers questions without losing the student's place, and finishes with an adaptive quiz.
 
+🏆 Winner: AI + Education Track, ForgeHacks Online 2026
+
 ## The Problem
 
 Course material is usually fragmented: slide decks in one place, PDFs in another, and recorded lectures elsewhere. Reading them alone is difficult when the important meaning lives in a diagram, example, or explanation rather than in the visible text.
